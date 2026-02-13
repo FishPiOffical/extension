@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "nest build -p tsconfig.build.json",
-    "postbuild": "copyfiles -u 1 package.json package-lock.json ../release/",
+    "postbuild": "copyfiles package.json package-lock.json ../release/",
     "start": "nest start -p tsconfig.json",
     "dev": "nest start -p tsconfig.json --watch",
     "prod": "node dist/main"
@@ -25,6 +25,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "fishpi": "^0.1.26",
     "multer": "^2.0.2",
     "mysql2": "^3.6.5",
     "passport": "^0.7.0",

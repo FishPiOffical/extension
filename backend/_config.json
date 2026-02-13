@@ -1,0 +1,13 @@
+{
+  "db": {
+    "host": "localhost",
+    "port": 3306,
+    "username": "hancel",
+    "password": "root_`1qw23",
+    "database": "fishpi",
+    "entityPrefix": "store_",
+    "logging": false
+  },
+  "port": 7900,
+  "jwtSecret": "fishpi-secret-key-change-in-production"
+}

@@ -208,7 +208,7 @@ onMounted(() => {
 
     <main v-else class="space-y-4">
       <div v-for="project in groupedWorks" :key="project.rootId" 
-        class="bg-base-100 border border-base-200 rounded-3xl overflow-hidden hover:border-primary/20 transition-all flex flex-col md:flex-row items-center p-6 gap-8">
+        class="bg-base-200 border border-base-200 rounded-3xl overflow-hidden hover:border-primary/20 transition-all flex flex-col md:flex-row items-center p-6 gap-8">
         
         <!-- Left: Project Icon -->
         <div class="w-20 h-20 rounded-3xl flex items-center justify-center shrink-0"

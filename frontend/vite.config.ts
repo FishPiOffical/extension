@@ -33,6 +33,6 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
-    outDir: '../dist/public',
+    outDir: '../release/public',
   }
 })

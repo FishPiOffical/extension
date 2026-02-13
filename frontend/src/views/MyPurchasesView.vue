@@ -92,7 +92,7 @@ onMounted(() => {
       <div v-if="items.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <div v-for="item in items" :key="item.id" 
           @click="router.push(`/item/${item.id}`)"
-          class="group bg-base-100 border border-base-200 rounded-xl hover:border-primary/20 hover:shadow-lg transition-all duration-300 flex flex-col p-5 cursor-pointer"
+          class="group bg-base-200 border border-base-200 rounded-xl hover:border-primary/20 hover:shadow-lg transition-all duration-300 flex flex-col p-5 cursor-pointer"
           :class="{'opacity-60 grayscale-[0.5]': !item.isEnabled}">
           
           <div class="flex items-start gap-4 mb-4">

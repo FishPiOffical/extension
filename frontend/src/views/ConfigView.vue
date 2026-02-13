@@ -112,13 +112,14 @@
             <label class="label px-1">
               <span class="text-xs font-bold opacity-60 uppercase">JWT Secret</span>
             </label>
-            <input
-              v-model="config.jwtSecret"
-              type="password"
-              placeholder="fishpi-secret-key-change-in-production"
-              class="input input-bordered w-full"
-              required
-            />
+            <label class="input">
+              <input
+                v-model="config.jwtSecret"
+                class="grow"
+                required
+              />
+              <Icon icon="fluent-emoji-high-contrast:game-die" class="text-base opacity-40 cursor-pointer" @click="generateKey" />
+            </label>
           </div>
 
           <div class="form-control w-full">
@@ -189,11 +190,12 @@ const submitConfig = async () => {
   try {
     await setupConfig(config.value)
     // 配置成功，跳转到首页
-    router.push('/')
+    setTimeout(() => {
+      router.push('/');
+      loading.value = false
+    }, 5000)
   } catch (err: any) {
     error.value = err.response?.data?.msg || err.message || '配置失败，请检查输入'
-  } finally {
-    loading.value = false
   }
 }
 
@@ -203,4 +205,9 @@ useAuthStore().checkConfig().then((isConfigured) => {
     window.location.href = '/'
   }
 })
+
+function generateKey() {
+  const randomKey = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+  config.value.jwtSecret = randomKey;
+}
 </script>

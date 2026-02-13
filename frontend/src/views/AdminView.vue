@@ -83,7 +83,7 @@ onMounted(() => {
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div v-for="item in items" :key="item.id" 
            @click="openReviewModal(item)"
-           class="bg-base-100 border border-base-200 rounded-3xl p-6 hover:border-primary/20 hover:shadow-xl transition-all cursor-pointer group">
+           class="bg-base-200 border border-base-200 rounded-3xl p-6 hover:border-primary/20 hover:shadow-xl transition-all cursor-pointer group">
         <div class="flex items-start justify-between mb-4">
           <div class="w-12 h-12 rounded-2xl flex items-center justify-center bg-base-200 group-hover:bg-primary/20 group-hover:text-primary transition-colors">
             <Icon :icon="item.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-6 h-6" />
@@ -107,7 +107,7 @@ onMounted(() => {
         <div class="w-16 h-16 bg-base-200 rounded-2xl flex items-center justify-center mb-6 text-base-content/20">
           <Icon icon="mdi:check-all" class="h-8 w-8" />
         </div>
-        <p class="text-base-content/20 text-lg font-black uppercase tracking-widest italic">All caught up!</p>
+        <p class="text-base-content/20 text-lg font-black uppercase tracking-widest italic">没有更多的待审核项目</p>
       </div>
     </div>
 
@@ -199,7 +199,7 @@ onMounted(() => {
                     <pre v-if="viewMode === 'code'" class="m-0 p-8 overflow-auto max-h-[70vh] text-xs font-mono leading-relaxed bg-[#0d1117]">
                       <code :class="'language-' + selectedItem.language">{{ selectedItem.code }}</code>
                     </pre>
-                    <div v-else class="max-h-[70vh] overflow-auto bg-[#0d1117]">
+                    <div v-else class="max-h-[70vh] overflow-auto bg-[#0d1117] pl-4">
                       <CodeDiff
                         :old-string="selectedItem.upgradeFrom?.code || ''"
                         :new-string="selectedItem.code"

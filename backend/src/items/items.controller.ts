@@ -76,7 +76,7 @@ export class ItemsController {
       return;
     }
     const allowGlobals = defaultAllowGlobals;
-    const code =`export const activate = (window, document, token) => {
+    const code =`export const activate = async (window, document, token) => {
   const { ${allowGlobals.join(', ')} } = window; // 允许访问这些全局变量
   let globalThis; // 禁止访问 globalThis
   ${item.code}

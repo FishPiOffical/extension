@@ -150,7 +150,7 @@ onMounted(() => {
     <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       <div v-for="item in filteredItems" :key="item.id" 
         @click="router.push(`/item/${item.id}`)"
-        class="group bg-base-100 border border-base-200 rounded-xl hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 flex flex-col p-5 cursor-pointer">
+        class="group bg-base-200 border border-base-200 rounded-xl hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 flex flex-col p-5 cursor-pointer">
         
         <div class="flex items-start gap-4 mb-4">
           <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors"
