@@ -102,9 +102,9 @@ export class ItemsController {
     res.send(item.code);
   }
 
-  @Get(':username/loader.js')
-  async getLoader(@Param('username') username: string, @Res() res) {
-    const user = await this.usersService.findOne(username, true);
+  @Get(':id/loader.js')
+  async getLoader(@Param('id') id: string, @Res() res) {
+    const user = await this.usersService.findById(id);
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -115,7 +115,7 @@ export class ItemsController {
     if (!user) {
       res.send(`
         const scriptSrc = new URL(import.meta.url);
-        console.info("${username} 还没注册哦~");
+        console.info("${user.username} 还没注册哦~");
         console.info(\`访问 \${scriptSrc.origin} 登录账号添加扩展吧！\`);
       `);
       return;
