@@ -172,7 +172,7 @@ onMounted(() => {
           </div>
         </div>
 
-        <p class="text-sm text-base-content/70 line-clamp-2 h-10 mb-5 leading-relaxed">
+        <p class="text-sm text-base-content/70 line-clamp-2 mb-5 leading-relaxed">
           {{ item.description || '暂无描述信息...' }}
         </p>
 
