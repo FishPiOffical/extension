@@ -105,6 +105,9 @@ export class ItemsController {
   @Get(':username/loader.js')
   async getLoader(@Param('username') username: string, @Res() res) {
     const user = await this.usersService.findOne(username, true);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
