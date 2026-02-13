@@ -1,0 +1,20 @@
+{
+  "name": "extension-loader",
+  "version": "0.0.1",
+  "description": "load fishpi extension",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsdown && shx mv ./dist/loader.mjs ../backend/loader.min.js",
+    "build": "tsdown",
+    "postbuild": "shx mv ./dist/loader.mjs ../release/loader.min.js"
+  },
+  "author": "Hancel.Lin",
+  "license": "MIT",
+  "devDependencies": {
+    "shx": "^0.4.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "tsdown": "^0.18.0",
+    "typescript": "^5.9.3"
+  }
+}

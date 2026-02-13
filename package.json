@@ -1,0 +1,31 @@
+{
+  "name": "fishpi-extension",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fishpi Extension Store",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "loader"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:loader\"",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:loader": "npm run dev --workspace=loader",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:loader",
+    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:loader": "npm run build --workspace=loader",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "concurrently": "^9.2.1",
+    "copyfiles": "^2.4.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "fishpi": "^0.1.26"
+  }
+}
