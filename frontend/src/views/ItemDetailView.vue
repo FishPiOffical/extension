@@ -170,7 +170,7 @@ onMounted(() => {
                   v{{ item.version || 1 }}
                   <Icon icon="mdi:chevron-down" class="w-4 h-4" />
                 </label>
-                <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow-2xl bg-base-200 rounded-2xl w-32 mt-2 border border-base-300">
+                <ul tabindex="0" class="dropdown-content z-1 menu p-2 shadow-2xl bg-base-200 rounded-2xl w-32 mt-2 border border-base-300">
                   <li v-for="v in versions" :key="v.id">
                     <a @click="router.push(`/item/${v.id}`)" 
                        class="rounded-xl font-bold py-2"
