@@ -115,7 +115,6 @@ export class ItemsController {
     if (!user) {
       res.send(`
         const scriptSrc = new URL(import.meta.url);
-        console.info("${user.username} 还没注册哦~");
         console.info(\`访问 \${scriptSrc.origin} 登录账号添加扩展吧！\`);
       `);
       return;
