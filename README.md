@@ -2,9 +2,9 @@
   <img width="200" src="./frontend/src/assets/logo.svg">
 </p>
 
-<p align="center">摸鱼派扩展商店</p>
+<p align="center">摸鱼派扩展集市</p>
 <p align="center">
-  摸鱼派扩展商店是一个为<a href="https://fishpi.cn/" target="_blank">摸鱼派平台</a>提供插件分发和管理的系统，旨在为统一用户分发与使用鱼排专属扩展，提升摸鱼派的功能和用户体验。即刻访问：<a href="https://ext.adventext.fun/" target="_blank">鱼排扩展商店</a>
+  摸鱼派扩展集市是一个为<a href="https://fishpi.cn/" target="_blank">摸鱼派平台</a>提供插件分发和管理的系统，旨在为统一用户分发与使用鱼排专属扩展，提升摸鱼派的功能和用户体验。即刻访问：<a href="https://ext.adventext.fun/" target="_blank">鱼排扩展集市</a>
 </p>
   
 ## ⚙️ 调试/运行
