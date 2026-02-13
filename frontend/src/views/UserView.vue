@@ -1,30 +1,36 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { getItems, purchaseItem, getPurchasedItems } from '@/api/items'
+import { getItemsByAuthor, purchaseItem, getPurchasedItems } from '@/api/items'
+import { getUser, type UserProfile } from '@/api/user'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 
+const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const items = ref<any[]>([])
+const user = ref<UserProfile | null>(null)
 const myPurchases = ref<any[]>([])
 const loading = ref(true)
 const activeTab = ref('all')
-const searchQuery = ref('')
+const username = computed(() => route.params.username as string)
 
-const loadItems = async () => {
+const loadData = async () => {
   loading.value = true
   try {
-    const [itemsRes, purchasesRes] = await Promise.all([
-      getItems(),
+    const [userRes, itemsRes, purchasesRes] = await Promise.all([
+      getUser(username.value),
+      getItemsByAuthor(username.value),
       authStore.isAuthenticated ? getPurchasedItems() : Promise.resolve({ data: [] })
     ])
+    user.value = userRes.data
     items.value = itemsRes.data
     myPurchases.value = purchasesRes.data
   } catch (error) {
-    console.error('Failed to load items:', error)
+    console.error('Failed to load user data:', error)
+    Message.error('加载用户信息失败')
   }
   loading.value = false
 }
@@ -49,7 +55,8 @@ const handlePurchase = async (item: any) => {
   try {
     await purchaseItem(item.id)
     Message.success(ownedVersion ? '切换成功！' : '购买成功！')
-    await loadItems()
+    const purchasesRes = await getPurchasedItems()
+    myPurchases.value = purchasesRes.data
   } catch (error: any) {
     console.error('Purchase failed:', error)
   }
@@ -61,15 +68,6 @@ const filteredItems = computed(() => {
   // Tab filter
   if (activeTab.value !== 'all') {
     filtered = filtered.filter(item => item.type === activeTab.value)
-  }
-
-  // Search filter
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(item => 
-      item.name.toLowerCase().includes(query) || 
-      item.description?.toLowerCase().includes(query)
-    )
   }
 
   return filtered
@@ -90,49 +88,56 @@ const getOwnedVersionOfSameProject = (item: any) => {
 }
 
 onMounted(() => {
-  loadItems()
+  loadData()
+})
+
+watch(() => route.params.username, () => {
+  loadData()
 })
 </script>
 
 <template>
   <div class="space-y-6 p-4">
-    <!-- Header Area -->
-    <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-base-100 p-6 rounded-2xl border border-base-200">
-      <div>
-        <h1 class="text-2xl font-bold tracking-tight">扩展集市</h1>
-        <p class="text-xs text-base-content/50 mt-1 whitespace-nowrap">发现并获取鱼排的最新扩展与主题</p>
+    <!-- User Profile Header -->
+    <header class="bg-base-100 p-8 rounded-2xl border border-base-200 flex flex-col md:flex-row items-center gap-6">
+      <div class="avatar">
+        <div class="w-24 h-24 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2">
+          <img :src="user?.avatar || 'https://pwl.icu/images/default-avatar.png'" />
+        </div>
       </div>
-
-      <div class="flex flex-col md:flex-row gap-4 items-center flex-1 max-w-2xl lg:justify-end w-full">
-        <!-- Search -->
-        <div class="flex-1 input input-bordered">
-          <Icon icon="mdi:magnify" />
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索插件或主题..."
-            class="grow"
-          />
+      <div class="flex-1 text-center md:text-left">
+        <h1 class="text-3xl font-bold flex items-center justify-center md:justify-start gap-2">
+          {{ user?.nickname || user?.username || '加载中...' }}
+          <div v-if="user?.isAdmin" class="badge badge-secondary">管理员</div>
+        </h1>
+        <p class="text-base-content/60 mt-2">@{{ user?.username }}</p>
+        <div class="mt-4 flex flex-wrap justify-center md:justify-start gap-4 text-sm opacity-70">
+          <span class="flex items-center gap-1">
+            <Icon icon="mdi:calendar" />
+            注册于 {{ user ? new Date(user.createdAt).toLocaleDateString() : '...' }}
+          </span>
+          <span class="flex items-center gap-1">
+            <Icon icon="mdi:package-variant" />
+            发布了 {{ items.length }} 个作品
+          </span>
         </div>
-
-        <!-- Filter Tabs -->
-        <div class="join bg-base-200/40 p-1 rounded-xl shrink-0">
-          <button 
-            @click="activeTab = 'all'" 
-            class="btn btn-sm join-item px-4"
-            :class="activeTab === 'all' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
-          >全部</button>
-          <button 
-            @click="activeTab = 'extension'" 
-            class="btn btn-sm join-item px-4"
-            :class="activeTab === 'extension' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
-          >插件</button>
-          <button 
-            @click="activeTab = 'theme'" 
-            class="btn btn-sm join-item px-4"
-            :class="activeTab === 'theme' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
-          >主题</button>
-        </div>
+      </div>
+      <div class="join bg-base-200/40 p-1 rounded-xl shrink-0">
+        <button 
+          @click="activeTab = 'all'" 
+          class="btn btn-sm join-item px-4"
+          :class="activeTab === 'all' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
+        >全部</button>
+        <button 
+          @click="activeTab = 'extension'" 
+          class="btn btn-sm join-item px-4"
+          :class="activeTab === 'extension' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
+        >插件</button>
+        <button 
+          @click="activeTab = 'theme'" 
+          class="btn btn-sm join-item px-4"
+          :class="activeTab === 'theme' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
+        >主题</button>
       </div>
     </header>
 
@@ -143,7 +148,7 @@ onMounted(() => {
 
     <!-- Empty State -->
     <div v-else-if="filteredItems.length === 0" class="text-center py-20 opacity-50">
-      <p>暂无相关内容</p>
+      <p>这位小伙伴还没有发布任何作品呢~</p>
     </div>
 
     <!-- Items Grid -->
@@ -167,7 +172,6 @@ onMounted(() => {
                 :class="item.type === 'extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
                 {{ item.type === 'extension' ? '插件' : '主题' }}
               </span>
-              <router-link :to="`/user/${item.author?.username}`" @click.stop class="text-xs opacity-40 hover:text-primary transition-colors truncate">@{{ item.author?.username || '匿名' }}</router-link>
             </div>
           </div>
         </div>

@@ -157,7 +157,7 @@ onMounted(() => {
         <div class="flex flex-col md:flex-row gap-8 items-start">
           <!-- Icon -->
           <div class="w-24 h-24 rounded-3xl flex items-center justify-center shrink-0"
-               :class="item.type === 'extension' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary'">
+               :class="item.type === 'extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
             <Icon :icon="item.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-12 h-12" />
           </div>
 
@@ -174,7 +174,7 @@ onMounted(() => {
                   <li v-for="v in versions" :key="v.id">
                     <a @click="router.push(`/item/${v.id}`)" 
                        class="rounded-xl font-bold py-2"
-                       :class="v.id === item.id ? 'bg-primary text-primary-content' : 'hover:bg-primary/10'">
+                       :class="v.id === item.id ? 'bg-primary text-primary-content' : 'hover:bg-primary/20'">
                       v{{ v.version || 1 }}
                       <span v-if="v.id === item.id" class="text-[10px] lowercase opacity-60">(当前)</span>
                     </a>
@@ -182,7 +182,7 @@ onMounted(() => {
                 </ul>
               </div>
               <span v-else class="badge badge-lg badge-ghost font-medium">v{{ item.version || 1 }}</span>
-              <span class="badge badge-lg border-none" :class="item.type === 'extension' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary'">
+              <span class="badge badge-lg border-none" :class="item.type === 'extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
                 {{ item.type === 'extension' ? '插件' : '主题' }}
               </span>
             </div>
@@ -190,14 +190,14 @@ onMounted(() => {
             <p class="text-lg text-base-content/70 leading-relaxed">{{ item.description }}</p>
             
             <div class="flex flex-wrap items-center gap-6 pt-2">
-              <div class="flex items-center gap-2">
+              <router-link :to="`/user/${item.author?.username}`" class="flex items-center gap-2 hover:text-primary transition-colors">
                 <div class="avatar">
                   <div class="w-8 h-8 rounded-full">
                     <img :src="item.author?.avatar" alt="Author Avatar" />
                   </div>
                 </div>
                 <span class="text-sm font-medium">{{ item.author?.username }}</span>
-              </div>
+              </router-link>
               <div class="flex items-center gap-2 text-sm opacity-50">
                 <Icon icon="mdi:calendar" class="w-4 h-4" />
                 {{ new Date(item.createdAt).toLocaleDateString() }}

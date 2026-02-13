@@ -87,6 +87,28 @@ export class ItemsService {
     return query.getMany();
   }
 
+  async findByAuthor(username: string): Promise<Item[]> {
+    const query = this.itemsRepository.createQueryBuilder('item')
+      .leftJoinAndSelect('item.author', 'author')
+      .leftJoinAndSelect('item.purchasedBy', 'purchasedBy')
+      .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
+      .where('author.username = :username', { username })
+      .andWhere('item.status = :status', { status: ItemStatus.APPROVED });
+    
+    // Only show the latest version of each project
+    query.andWhere(qb => {
+      const subQuery = qb.subQuery()
+        .select('1')
+        .from(Item, 'next')
+        .where('next.upgradeFromId = item.id')
+        .andWhere('next.status = :status', { status: ItemStatus.APPROVED })
+        .getQuery();
+      return 'NOT EXISTS ' + subQuery;
+    });
+    
+    return query.getMany();
+  }
+
   async findOne(id: number, userId?: string): Promise<any> {
     const item = await this.itemsRepository.findOne({
       where: { id },

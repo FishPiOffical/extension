@@ -83,9 +83,9 @@ onMounted(() => {
     <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div v-for="item in items" :key="item.id" 
            @click="openReviewModal(item)"
-           class="bg-base-100 border border-base-200 rounded-3xl p-6 hover:border-primary/40 hover:shadow-xl transition-all cursor-pointer group">
+           class="bg-base-100 border border-base-200 rounded-3xl p-6 hover:border-primary/20 hover:shadow-xl transition-all cursor-pointer group">
         <div class="flex items-start justify-between mb-4">
-          <div class="w-12 h-12 rounded-2xl flex items-center justify-center bg-base-200 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+          <div class="w-12 h-12 rounded-2xl flex items-center justify-center bg-base-200 group-hover:bg-primary/20 group-hover:text-primary transition-colors">
             <Icon :icon="item.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-6 h-6" />
           </div>
           <div class="badge badge-warning badge-sm font-black uppercase tracking-tight py-3">Pending</div>
@@ -116,7 +116,7 @@ onMounted(() => {
       <div v-if="selectedItem" class="modal-box w-screen max-w-screen h-screen max-h-screen p-0 flex flex-col overflow-hidden rounded-[2.5rem]">
         <div class="flex items-center justify-between px-8 py-6 bg-base-200/50 backdrop-blur-md border-b border-base-300">
            <div class="flex items-center gap-4">
-             <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+             <div class="w-10 h-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center">
                 <Icon :icon="selectedItem.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-6 h-6" />
              </div>
              <div>

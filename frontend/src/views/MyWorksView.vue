@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { getMyPublishedItems, getMyDrafts, publishDraft, withdrawItem, deleteItem, type Item } from '@/api/items'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const allItems = ref<Item[]>([])
 const loading = ref(true)
 
@@ -156,13 +158,17 @@ onMounted(() => {
     <!-- Header -->
     <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-base-100 p-6 rounded-2xl border border-base-200">
       <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary shrink-0">
+        <div class="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center text-primary shrink-0">
           <Icon icon="mdi:package-variant" class="h-6 w-6" />
         </div>
         <div>
           <h1 class="text-2xl font-bold tracking-tight flex items-center gap-3">
             我的作品
             <span class="badge badge-primary badge-soft font-bold rounded-lg">{{ groupedWorks.length }}</span>
+            <router-link v-if="authStore.user" :to="`/user/${authStore.user.username}`" class="btn btn-xs btn-ghost gap-1 opacity-50 hover:opacity-100">
+              <Icon icon="mdi:account-circle-outline" />
+              查看公共主页
+            </router-link>
           </h1>
           <p class="text-xs text-base-content/50 mt-0.5 whitespace-nowrap">管理您创建的所有作品及其版本</p>
         </div>
@@ -206,7 +212,7 @@ onMounted(() => {
         
         <!-- Left: Project Icon -->
         <div class="w-20 h-20 rounded-3xl flex items-center justify-center shrink-0"
-              :class="project.mainItem.type === 'extension' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary'">
+              :class="project.mainItem.type === 'extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
           <Icon :icon="project.mainItem.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-10 h-10" />
         </div>
 

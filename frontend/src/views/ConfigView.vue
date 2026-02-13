@@ -2,7 +2,7 @@
   <div class="min-h-screen flex items-center justify-center p-4 bg-base-100">
     <div class="premium-card w-full max-w-3xl p-8">
       <div class="flex flex-col items-center mb-8">
-        <div class="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-6">
+        <div class="w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center mb-6">
           <img src="https://room.adventext.fun/fishpi.svg" alt="FishPi" class="h-10 w-10" />
         </div>
         <h1 class="text-3xl font-black tracking-tight text-base-content uppercase">系统配置</h1>

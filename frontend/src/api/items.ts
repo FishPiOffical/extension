@@ -47,6 +47,13 @@ export function getItems() {
 }
 
 /**
+ * Get items by author
+ */
+export function getItemsByAuthor(username: string) {
+  return request.get<Item[]>(`/items/author/${username}`)
+}
+
+/**
  * Get pending items (admin only)
  */
 export function getPendingItems() {

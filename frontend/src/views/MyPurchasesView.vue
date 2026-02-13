@@ -71,7 +71,7 @@ onMounted(() => {
     <!-- Unified Header -->
     <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-base-100 p-6 rounded-2xl border border-base-200">
       <div class="flex items-center gap-4">
-        <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary shrink-0">
+        <div class="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center text-primary shrink-0">
           <Icon icon="mdi:bookmark-outline" class="h-6 w-6" />
         </div>
         <div>
@@ -92,17 +92,17 @@ onMounted(() => {
       <div v-if="items.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <div v-for="item in items" :key="item.id" 
           @click="router.push(`/item/${item.id}`)"
-          class="group bg-base-100 border border-base-200 rounded-xl hover:border-primary/40 hover:shadow-lg transition-all duration-300 flex flex-col p-5 cursor-pointer"
+          class="group bg-base-100 border border-base-200 rounded-xl hover:border-primary/20 hover:shadow-lg transition-all duration-300 flex flex-col p-5 cursor-pointer"
           :class="{'opacity-60 grayscale-[0.5]': !item.isEnabled}">
           
           <div class="flex items-start gap-4 mb-4">
             <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors"
-                  :class="item.type === 'extension' ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-secondary'">
+                  :class="item.type === 'extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
               <Icon :icon="item.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-7 h-7" />
             </div>
             <div class="flex-1 min-w-0">
               <h2 class="font-bold text-base truncate">{{ item.name }}</h2>
-              <p class="text-xs opacity-40 mt-1">@{{ item.author?.username }}</p>
+              <router-link :to="`/user/${item.author?.username}`" @click.stop class="text-xs opacity-40 mt-1 hover:text-primary transition-colors block">@{{ item.author?.username }}</router-link>
             </div>
             <div class="flex flex-col items-end gap-2">
                <div class="badge font-black text-[8px] tracking-tight py-0 px-1.5 border-none">

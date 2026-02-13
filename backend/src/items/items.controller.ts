@@ -55,7 +55,12 @@ export class ItemsController {
   async getMyDrafts(@Request() req) {
     return this.itemsService.findMyDrafts(req.user.userId);
   }
-  
+
+  @Get('author/:username')
+  async getByAuthor(@Param('username') username: string) {
+    return this.itemsService.findByAuthor(username);
+  }
+
   @Get(':id.js')
   async getItemCode(@Param('id') id: number, @Res() res) {
     const item = await this.itemsService.findOne(id);

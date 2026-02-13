@@ -81,6 +81,7 @@ const logout = () => {
             <li class="px-4 py-2 opacity-50 text-xs font-bold uppercase tracking-wider">
               {{ authStore.user?.username }}
             </li>
+            <li><RouterLink :to="`/user/${authStore.user?.username}`">个人主页</RouterLink></li>
             <li><RouterLink to="/my-purchases">我的收藏</RouterLink></li>
             <li><RouterLink to="/my-works">我的作品</RouterLink></li>
             <li v-if="authStore.isAdmin"><RouterLink to="/admin">管理后台</RouterLink></li>

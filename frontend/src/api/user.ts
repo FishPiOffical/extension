@@ -1,8 +1,10 @@
 import request from '../utils/request'
 
 export interface UserProfile {
-  id: number
+  id: string
   username: string
+  nickname?: string
+  avatar?: string
   isAdmin: boolean
   points: number
   createdAt: string
@@ -13,4 +15,11 @@ export interface UserProfile {
  */
 export function getUserProfile() {
   return request.get<UserProfile>('/users/profile')
+}
+
+/**
+ * Get user profile by username
+ */
+export function getUser(username: string) {
+  return request.get<UserProfile>(`/users/${username}`)
 }
