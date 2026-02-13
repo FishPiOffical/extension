@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './user.entity';
-import Fishpi, { UserInfo } from 'fishpi';
+import Fishpi, { FingerTo, UserInfo } from 'fishpi';
+import { ConfigService } from 'src/config/config.service';
 
 @Injectable()
 export class UsersService {
@@ -45,8 +46,13 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { id } });
   }
 
-  async updatePoints(userId: string, points: number): Promise<void> {
-    
+  async updatePoints(username: string, points: number, remark: string): Promise<void> {
+    const goldenKey = ConfigService.getConfig()?.goldenKey;
+    if (!goldenKey) {
+      throw new Error('Golden key not configured');
+    }
+    const pointFinger = FingerTo(goldenKey);
+    pointFinger.editUserPoints(username, points, remark);
   }
 
   getUser(username: string) {

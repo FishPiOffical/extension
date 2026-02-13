@@ -14,3 +14,6 @@
 3. 执行 `npm run dev:frontend` 启动前端开发服务器，访问 `http://localhost:5173` 即可开始开发。
 4. 或执行 `npm run dev` 同时启动后端和前端，访问 `http://localhost:5173` 也可开始开发。
 
+## 内置对象
+
+Javascript 运行时会注入一个全局对象 `fishpi`，提供了所有鱼排接口，并已关联登录用户。具体接口参考 [fishpi.js](https://github.com/FishPiOffical/fishpi.js)。

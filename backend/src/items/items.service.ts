@@ -180,8 +180,14 @@ export class ItemsService {
         throw new BadRequestException('积分不足，无法获取！');
       }
 
-      if (item.price > 0) {
-        await this.usersService.updatePoints(userId, -item.price);
+      if (item.price > 0 && user.id !== item.author.id) {
+        const type = {
+          javascript: '扩展',
+          css: '主题',
+        }[item.type];
+        await this.usersService.updatePoints(user.username, -item.price, `购买${type} ${item.name}`);
+        await this.usersService.updatePoints(item.author.username, item.price * 0.7, `出售${type} ${item.name}`);
+        await this.usersService.updatePoints(item.author.username, item.price * 0.3, `买卖${type} ${item.name} 手续费`);
       }
     }
 
