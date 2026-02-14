@@ -27,7 +27,7 @@ export class Item {
   @Column({ type: 'simple-enum', enum: ItemType, comment: '项目类型' })
   type: ItemType;
 
-  @Column('text', { comment: '项目代码' })
+  @Column('longtext', { comment: '项目代码' })
   code: string;
 
   @Column({ comment: '编程语言' })
