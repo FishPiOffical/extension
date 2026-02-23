@@ -57,4 +57,10 @@ export const defaultAllowGlobals = [
   'stop',
   'addEventListener',
   'removeEventListener',
+  // GM Function export
+  'GM_deleteValue',
+  'GM_getValue',
+  'GM_listValues',
+  'GM_setValue',
+  'GM_xmlhttpRequest',
 ]
