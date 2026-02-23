@@ -204,7 +204,7 @@ onMounted(() => {
               </div>
               <div class="flex items-center gap-2 text-sm opacity-50">
                 <Icon icon="mdi:download-outline" class="w-4 h-4" />
-                {{ item.purchasedBy?.length || 0 }} 次获取
+                安装量 {{ item.purchasedBy?.length || 0 }}
               </div>
             </div>
           </div>

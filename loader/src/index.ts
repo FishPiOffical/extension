@@ -1,4 +1,5 @@
 import Fishpi from 'fishpi/browser';
+import * as GM from './gm';
 const defaultAllowGlobals = [
   'crypto',
   'console',
@@ -150,7 +151,7 @@ async function activate() {
     }
     const module = await import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js`);  // 返回模块对象
     const activate = module.activate;  // 获取导出的 activate 函数
-    await activate?.({ ...newWindow, localStorage: newLocalStorage, sessionStorage: newSessionStorage }, document, fishpi).catch(console.error);
+    await activate?.({ ...newWindow, ...GM, localStorage: newLocalStorage, sessionStorage: newSessionStorage }, document, fishpi).catch(console.error);
   });
 
   themeItems.forEach(async item => {
