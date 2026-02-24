@@ -19,6 +19,7 @@ export interface Item {
   }
   purchasedBy?: Array<{ id: number; username: string }>
   isEnabled?: boolean
+  matchUrls?: string[]
   upgradeFrom?: Item | number
   upgradeFromId?: number
 }
@@ -30,6 +31,7 @@ export interface UploadItemData {
   type: 'extension' | 'theme'
   code: string
   language: string
+  matchUrls?: string[]
   upgradeFromId?: number
   isDraft?: boolean
 }

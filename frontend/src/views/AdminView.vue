@@ -138,6 +138,13 @@ onMounted(() => {
                  <p class="text-base-content/70 font-medium leading-relaxed">{{ selectedItem.description }}</p>
                </section>
 
+               <section v-if="selectedItem.matchUrls && selectedItem.matchUrls.length > 0">
+                 <div class="text-[10px] font-black uppercase tracking-widest opacity-30 mb-3">生效网址</div>
+                 <div class="flex flex-wrap gap-2">
+                   <span v-for="url in selectedItem.matchUrls" :key="url" class="badge badge-sm badge-ghost font-mono opacity-60">{{ url }}</span>
+                 </div>
+               </section>
+
                <div class="grid grid-cols-2 gap-6 py-8 border-y border-base-200">
                   <div>
                     <div class="text-[10px] uppercase font-black opacity-30 tracking-widest mb-1">价格</div>

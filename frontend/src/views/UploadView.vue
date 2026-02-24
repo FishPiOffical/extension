@@ -16,6 +16,7 @@ const name = ref('')
 const description = ref('')
 const price = ref(0)
 const code = ref('')
+const matchUrls = ref('')
 const language = ref('javascript')
 const type = ref<'extension' | 'theme'>('extension')
 const uploading = ref(false)
@@ -62,6 +63,7 @@ onMounted(async () => {
         type.value = draft.type
         language.value = draft.language
         code.value = draft.code
+        matchUrls.value = (draft.matchUrls || []).join('\n')
       }
     } catch(e) { console.error(e) }
   }
@@ -77,6 +79,7 @@ watch(selectedItemId, (newId) => {
       type.value = item.type
       language.value = item.language
       code.value = item.code || ''
+      matchUrls.value = (item.matchUrls || []).join('\n')
     }
   }
 })
@@ -100,6 +103,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
         type: type.value,
         code: code.value,
         language: language.value,
+        matchUrls: matchUrls.value ? matchUrls.value.split('\n').map(u => u.trim()).filter(u => u) : [],
       })
       
       if (isDraft) {
@@ -118,6 +122,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
         type: type.value,
         code: code.value,
         language: language.value,
+        matchUrls: matchUrls.value ? matchUrls.value.split('\n').map(u => u.trim()).filter(u => u) : [],
         upgradeFromId: mode.value === 'upgrade' && selectedItemId.value ? selectedItemId.value : undefined,
         isDraft,
       })
@@ -227,6 +232,11 @@ const handleSubmit = async (isDraft: boolean = false) => {
               <div class="form-control w-full">
                 <label class="label mb-2"><span class="text-xs font-black uppercase tracking-widest opacity-40">设定积分价格</span></label>
                 <input v-model.number="price" type="number" min="0" class="input input-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 h-14 font-bold" required />
+              </div>
+
+              <div class="form-control w-full md:col-span-2">
+                <label class="label mb-2"><span class="text-xs font-black uppercase tracking-widest opacity-40">生效网址 (可选)</span></label>
+                <textarea v-model="matchUrls" placeholder="每行一个网址匹配模式，例如: /articles/* 或 https://fishpi.cn/*&#10;不填写则全局生效" class="textarea textarea-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 py-4 h-24 font-mono text-xs leading-relaxed"></textarea>
               </div>
 
               <div class="form-control w-full md:col-span-2">

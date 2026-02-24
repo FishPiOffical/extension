@@ -77,7 +77,7 @@ const isAuthor = computed(() => {
 const doPurchase = async () => {
   if (!authStore.isAuthenticated) {
     message.error('请先登录')
-    router.push('/login')
+    window.location.href = '/api/auth/login'
     return
   }
   
@@ -188,6 +188,11 @@ onMounted(() => {
             </div>
             
             <p class="text-lg text-base-content/70 leading-relaxed">{{ item.description }}</p>
+
+            <div v-if="item.matchUrls && item.matchUrls.length > 0" class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-black uppercase tracking-widest opacity-40">生效网址:</span>
+              <span v-for="url in item.matchUrls" :key="url" class="badge badge-sm badge-ghost opacity-60 font-mono">{{ url }}</span>
+            </div>
             
             <div class="flex flex-wrap items-center gap-6 pt-2">
               <router-link :to="`/user/${item.author?.username}`" class="flex items-center gap-2 hover:text-primary transition-colors">

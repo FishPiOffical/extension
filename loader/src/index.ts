@@ -56,6 +56,13 @@ const defaultAllowGlobals = [
   'addEventListener',
   'removeEventListener',
 ]
+
+function matchUrl(pattern: string, currentHref: string, currentPath: string) {
+  const p = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  const regex = new RegExp('^' + p + '$');
+  return regex.test(pattern.startsWith('/') ? currentPath : currentHref);
+}
+
 function readOnly(obj: any, fields: string[]) {
   // 浅拷贝原始对象
   const newObj = { ...obj };
@@ -92,12 +99,35 @@ function pick(obj: any, fields: string[]) {
     return result;
 }
 
+function clone(obj: any, that: any = new Object()): any {
+  if (obj instanceof Function) {
+    return obj.bind(that);
+  }
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  if (obj instanceof Date) {
+    return new Date(obj.getTime());
+  }
+  if (obj instanceof Array) {
+    return obj.map(item => clone(item, obj));
+  }
+  const clonedObj: any = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      clonedObj[key] = clone(obj[key], obj);
+    }
+  }
+  return clonedObj;
+}
+
 async function activate() {
   // @ts-ignore
   const scriptSrc = new URL(import.meta.url);
   const newWindow: any = pick(window, defaultAllowGlobals);
   const { apiKey } = await fetch('/getApiKeyInWeb').then((r) => r.json())
   newWindow.location = {
+    ...clone(location, newWindow),
     ...readOnly(location, ['href', 'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash']),
     get href() {
       return location.href;
@@ -116,6 +146,11 @@ async function activate() {
 
   jsItems.forEach(async item => {
     const extension: any = extensionData.find((e: any) => e.id === item)!;
+    if (extension?.matchUrls && extension.matchUrls.length > 0) {
+      if (!extension.matchUrls.some((pattern: string) => matchUrl(pattern, location.href, location.pathname))) {
+        return;
+      }
+    }
     const newLocalStorage = {
       ...localStorage,
       setItem(key: string, value: string) {
@@ -170,6 +205,12 @@ async function activate() {
   });
 
   themeItems.forEach(async item => {
+    const extension: any = extensionData.find((e: any) => e.id === item)!;
+    if (extension?.matchUrls && extension.matchUrls.length > 0) {
+      if (!extension.matchUrls.some((pattern: string) => matchUrl(pattern, location.href, location.pathname))) {
+        return;
+      }
+    }
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.id = `theme-${item}`;

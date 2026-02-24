@@ -42,6 +42,9 @@ export class Item {
   @Column({ default: 1, comment: '版本' })
   version: number;
 
+  @Column({ type: 'simple-array', nullable: true, comment: '生效网址' })
+  matchUrls: string[];
+
   @ManyToOne(() => User, user => user.items)
   author: User;
 

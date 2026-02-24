@@ -50,9 +50,7 @@ request.interceptors.response.use(
       if (data && data.code === 40101) {
         // Token expired
         localStorage.removeItem('token')
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
-        }
+        window.location.href = '/api/auth/login'
         return Promise.reject(new Error(data.msg || '登录已过期'))
       }
 

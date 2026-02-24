@@ -123,8 +123,8 @@ export class ItemsController {
     const items = await this.itemsService.getUserPurchases(user.id);
     const extensionIds = items.filter(p => p.type === 'extension' && p.isEnabled).map(i => i.id);
     const themeIds = items.filter(p => p.type === 'theme' && p.isEnabled).map(i => i.id);
-    const extensionData = items.filter(p => p.type === 'extension' && p.isEnabled)
-      .map(i => ({ id: i.id, name: i.name }));
+    const extensionData = items.filter(p => p.isEnabled)
+      .map(i => ({ id: i.id, name: i.name, matchUrls: i.matchUrls }));
 
     res.send(loaderCode()
       .replace(/`{{#Ids}}`/, extensionIds.join(', '))
@@ -158,7 +158,7 @@ export class ItemsController {
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   async createItem(
-    @Body() body: { name: string; description: string; price: string; type: ItemType; code: string; language: string; upgradeFromId?: number; isDraft?: boolean },
+    @Body() body: { name: string; description: string; price: string; type: ItemType; code: string; language: string; matchUrls?: string[]; upgradeFromId?: number; isDraft?: boolean },
     @Request() req,
   ) {
     return this.itemsService.create(
@@ -169,6 +169,7 @@ export class ItemsController {
         code: body.code,
         language: body.language,
         price: parseInt(body.price) || 0,
+        matchUrls: body.matchUrls,
       },
       req.user.userId,
       body.upgradeFromId,
@@ -221,7 +222,7 @@ export class ItemsController {
   @UseGuards(JwtAuthGuard)
   async updateDraft(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { name?: string; description?: string; price?: string; type?: ItemType; code?: string; language?: string },
+    @Body() body: { name?: string; description?: string; price?: string; type?: ItemType; code?: string; language?: string; matchUrls?: string[] },
     @Request() req,
   ) {
     return this.itemsService.updateDraft(
@@ -233,6 +234,7 @@ export class ItemsController {
         code: body.code,
         language: body.language,
         price: body.price ? parseInt(body.price) : undefined,
+        matchUrls: body.matchUrls,
       },
       req.user.userId,
     );
