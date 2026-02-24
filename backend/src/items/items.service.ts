@@ -221,7 +221,7 @@ export class ItemsService {
     return this.itemsRepository.save(item);
   }
 
-  async getUserPurchases(userId: string): Promise<any[]> {
+  async getUserPurchases(userId: string) {
     const items = await this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoin('item.purchasedBy', 'purchasedBy')

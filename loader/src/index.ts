@@ -1,5 +1,6 @@
 import Fishpi from 'fishpi/browser';
 import * as GM from './gm';
+import * as msgbox from './msgbox';
 const defaultAllowGlobals = [
   'crypto',
   'console',
@@ -81,9 +82,12 @@ function readOnly(obj: any, fields: string[]) {
 function pick(obj: any, fields: string[]) {
     const result: any = {};
     fields.forEach(field => {
-        if (obj.hasOwnProperty(field)) {
-            result[field] = obj[field];
+      if (obj.hasOwnProperty(field)) {
+        if (obj[field] instanceof Function) {
+          result[field] = obj[field].bind(obj);
         }
+        else result[field] = obj[field];
+      }
     });
     return result;
 }
@@ -109,8 +113,10 @@ async function activate() {
   }
   const jsItems = [`{{#Ids}}`];
   const themeItems = [`{{#Themes}}`];
+  const extensionData = [`{{#ExtensionData}}`];
 
   jsItems.forEach(async item => {
+    const extension: any = extensionData.find((e: any) => e.id === item)!;
     const newLocalStorage = {
       ...localStorage,
       setItem(key: string, value: string) {
@@ -149,9 +155,19 @@ async function activate() {
         });
       }
     }
+    function open(url: string, target?: string, features?: string) {
+      if (!url.startsWith(location.origin) && !url.startsWith('/') && !url.startsWith('.')) {
+        return msgbox.confirm(`${extension.name}想打开一个链接：${url}，是否允许？`).then(allowed => {
+          if (allowed) {
+            return window.open(url, target, features);
+          }
+        });
+      }
+      return window.open(url, target, features);
+    }
     const module = await import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js`);  // 返回模块对象
     const activate = module.activate;  // 获取导出的 activate 函数
-    await activate?.({ ...newWindow, ...GM, localStorage: newLocalStorage, sessionStorage: newSessionStorage }, document, fishpi).catch(console.error);
+    await activate?.({ ...newWindow, ...GM, open, localStorage: newLocalStorage, sessionStorage: newSessionStorage }, document, fishpi).catch(console.error);
   });
 
   themeItems.forEach(async item => {

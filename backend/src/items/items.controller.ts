@@ -123,10 +123,13 @@ export class ItemsController {
     const items = await this.itemsService.getUserPurchases(user.id);
     const extensionIds = items.filter(p => p.type === 'extension' && p.isEnabled).map(i => i.id);
     const themeIds = items.filter(p => p.type === 'theme' && p.isEnabled).map(i => i.id);
+    const extensionData = items.filter(p => p.type === 'extension' && p.isEnabled)
+      .map(i => ({ id: i.id, name: i.name }));
 
     res.send(loaderCode()
       .replace(/`{{#Ids}}`/, extensionIds.join(', '))
       .replace(/`{{#Themes}}`/, themeIds.join(', '))
+      .replace(/\[`{{#ExtensionData}}`\]/, JSON.stringify(extensionData))
     );
   }
 
