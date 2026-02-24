@@ -134,23 +134,13 @@ export class ItemsController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    // Try to get userId from token if present, but don't require it
-    let userId = undefined;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      try {
-        const token = authHeader.substring(7);
-        // We can't easily access JwtService here without injecting it.
-        // For simplicity, let's just use the service without userId for now, 
-        // OR I can use the JwtAuthGuard and make it return 401 only if token is INVALID but not MISSING.
-      } catch (e) {}
-    }
-    
     return this.itemsService.findOne(id);
   }
 
   @Get(':id/versions')
+  @UseGuards(JwtAuthGuard)
   async getVersions(@Param('id', ParseIntPipe) id: number) {
     return this.itemsService.findVersions(id);
   }
