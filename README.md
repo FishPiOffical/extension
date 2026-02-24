@@ -17,3 +17,11 @@
 ## 内置对象
 
 Javascript 运行时会注入一个全局对象 `fishpi`，提供了所有鱼排接口，并已关联登录用户。具体接口参考 [fishpi.js](https://github.com/FishPiOffical/fishpi.js)。
+
+## 使用
+
+在网站上添加如下代码即可使用：
+
+```html
+<script src="https://ext.adventext.fun/api/items/<user_oId>/loader.js"></script>
+```
