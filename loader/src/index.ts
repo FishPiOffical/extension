@@ -157,7 +157,7 @@ async function activate() {
     }
     function open(url: string, target?: string, features?: string) {
       if (!url.startsWith(location.origin) && !url.startsWith('/') && !url.startsWith('.')) {
-        return msgbox.confirm(`${extension.name}想打开一个链接：${url}，是否允许？`).then(allowed => {
+        return msgbox.confirm(`${extension.name}想打开一个链接：<p>${url}</p>是否允许？`).then(allowed => {
           if (allowed) {
             return window.open(url, target, features);
           }

@@ -98,7 +98,7 @@ function createBox(message: string, options: { showInput?: boolean, defaultValue
         
         const content = document.createElement('div');
         content.className = 'msgbox-content';
-        content.textContent = message;
+        content.innerHTML = message;
         dialog.appendChild(content);
         
         const input = options.showInput ? document.createElement('input') : null;
