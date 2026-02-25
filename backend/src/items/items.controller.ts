@@ -129,7 +129,12 @@ export class ItemsController {
     const extensionIds = items.filter(p => p.type === 'extension' && p.isEnabled).map(i => i.id);
     const themeIds = items.filter(p => p.type === 'theme' && p.isEnabled).map(i => i.id);
     const extensionData = items.filter(p => p.isEnabled)
-      .map(i => ({ id: i.id, name: i.name, matchUrls: i.matchUrls }));
+      .map(i => ({ 
+        id: i.id, 
+        name: i.name, 
+        matchUrls: i.matchUrls,
+        dependencies: i.dependencies?.map(d => d.id) || []
+      }));
 
     res.send(loaderCode()
       .replace(/`{{#Ids}}`/, extensionIds.join(', '))
@@ -151,10 +156,16 @@ export class ItemsController {
     return this.itemsService.findVersions(id, req.user.userId);
   }
 
+  @Get(':id/dependencies')
+  @UseGuards(JwtAuthGuard)
+  async getRecursiveDependencies(@Param('id', ParseIntPipe) id: number) {
+    return this.itemsService.getRecursiveDependencies(id);
+  }
+
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   async createItem(
-    @Body() body: { name: string; description: string; price: string; type: ItemType; code: string; language: string; matchUrls?: string[]; upgradeFromId?: number; isDraft?: boolean },
+    @Body() body: { name: string; description: string; price: string; type: ItemType; code: string; language: string; matchUrls?: string[]; upgradeFromId?: number; isDraft?: boolean; dependencyIds?: number[] },
     @Request() req,
   ) {
     return this.itemsService.create(
@@ -170,6 +181,7 @@ export class ItemsController {
       req.user.userId,
       body.upgradeFromId,
       body.isDraft || false,
+      body.dependencyIds,
     );
   }
 
@@ -218,7 +230,7 @@ export class ItemsController {
   @UseGuards(JwtAuthGuard)
   async updateDraft(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { name?: string; description?: string; price?: string; type?: ItemType; code?: string; language?: string; matchUrls?: string[] },
+    @Body() body: { name?: string; description?: string; price?: string; type?: ItemType; code?: string; language?: string; matchUrls?: string[]; dependencyIds?: number[] },
     @Request() req,
   ) {
     return this.itemsService.updateDraft(
@@ -233,6 +245,7 @@ export class ItemsController {
         matchUrls: body.matchUrls,
       },
       req.user.userId,
+      body.dependencyIds,
     );
   }
 

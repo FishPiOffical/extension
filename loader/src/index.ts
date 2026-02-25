@@ -142,77 +142,96 @@ async function activate() {
   const jsItems = [`{{#Ids}}`];
   const themeItems = [`{{#Themes}}`];
   const userId = '{{#UserId}}';
-  const extensionData = [`{{#ExtensionData}}`];
+  const extensionData = [`{{#ExtensionData}}`] as any[];
+  const activationMap = new Map<any, Promise<void>>();
 
-  jsItems.forEach(async item => {
-    const extension: any = extensionData.find((e: any) => e.id === item)!;
-    if (extension?.matchUrls && extension.matchUrls.length > 0) {
-      if (!extension.matchUrls.some((pattern: string) => matchUrl(pattern, location.href, location.pathname))) {
-        return;
+  async function activateExtension(item: any) {
+    if (activationMap.has(item)) return activationMap.get(item);
+
+    const promise = (async () => {
+      const extension: any = extensionData.find((e: any) => e.id === item)!;
+      if (extension?.matchUrls && extension.matchUrls.length > 0) {
+        if (!extension.matchUrls.some((pattern: string) => matchUrl(pattern, location.href, location.pathname))) {
+          return;
+        }
       }
-    }
-    const newLocalStorage = {
-      ...localStorage,
-      setItem(key: string, value: string) {
-        return localStorage.setItem(`ext:${item}:${key}`, value);
-      },
-      getItem(key: string) {
-        return localStorage.getItem(`ext:${item}:${key}`);
-      },
-      removeItem(key: string) {
-        localStorage.removeItem(`ext:${item}:${key}`);
-      },
-      clear() {
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith(`ext:${item}:`)) {
-            localStorage.removeItem(key);
-          }
-        });
+
+      if (extension?.dependencies && extension.dependencies.length > 0) {
+        const deps = extension.dependencies.filter((id: any) => jsItems.includes(id));
+        await Promise.all(deps.map((id: any) => activateExtension(id)));
       }
-    }
-    const newSessionStorage = {
-      ...sessionStorage,
-      setItem(key: string, value: string) {
-        return sessionStorage.setItem(`ext:${item}:${key}`, value);
-      },
-      getItem(key: string) {
-        return sessionStorage.getItem(`ext:${item}:${key}`);
-      },
-      removeItem(key: string) {
-        sessionStorage.removeItem(`ext:${item}:${key}`);
-      },
-      clear() {
-        Object.keys(sessionStorage).forEach(key => {
-          if (key.startsWith(`ext:${item}:`)) {
-            sessionStorage.removeItem(key);
-          }
-        });
-      }
-    }
-    function open(url: string, target?: string, features?: string) {
-      if (!url.startsWith(location.origin) && !url.startsWith('/') && !url.startsWith('.')) {
-        return msgbox.confirm(`${extension.name}想打开一个链接：<p>${url}</p>是否允许？`).then(allowed => {
-          if (allowed) {
-            return window.open(url, target, features);
-          }
-        });
-      }
-      return window.open(url, target, features);
-    }
-    import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js?userId=${userId}`).then(module => {
-      const activate = module.activate;  // 获取导出的 activate 函数
-      activate?.({ 
-        ...newWindow, 
-        ...GM,
-        GM_registerMenuCommand: (name: string, fn: Function, accessKey?: string) => {
-          return GM.GM_registerMenuCommand(name, fn, accessKey, extension.name);
+
+      const newLocalStorage = {
+        ...localStorage,
+        setItem(key: string, value: string) {
+          return localStorage.setItem(`ext:${item}:${key}`, value);
         },
-        open, 
-        localStorage: newLocalStorage, 
-        sessionStorage: newSessionStorage 
-      }, document, new Fishpi(apiKey)).catch(console.error);
-    });
-  });
+        getItem(key: string) {
+          return localStorage.getItem(`ext:${item}:${key}`);
+        },
+        removeItem(key: string) {
+          localStorage.removeItem(`ext:${item}:${key}`);
+        },
+        clear() {
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith(`ext:${item}:`)) {
+              localStorage.removeItem(key);
+            }
+          });
+        }
+      }
+      const newSessionStorage = {
+        ...sessionStorage,
+        setItem(key: string, value: string) {
+          return sessionStorage.setItem(`ext:${item}:${key}`, value);
+        },
+        getItem(key: string) {
+          return sessionStorage.getItem(`ext:${item}:${key}`);
+        },
+        removeItem(key: string) {
+          sessionStorage.removeItem(`ext:${item}:${key}`);
+        },
+        clear() {
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith(`ext:${item}:`)) {
+              sessionStorage.removeItem(key);
+            }
+          });
+        }
+      }
+      function open(url: string, target?: string, features?: string) {
+        if (!url.startsWith(location.origin) && !url.startsWith('/') && !url.startsWith('.')) {
+          return msgbox.confirm(`${extension.name}想打开一个链接：<p>${url}</p>是否允许？`).then(allowed => {
+            if (allowed) {
+              return window.open(url, target, features);
+            }
+          });
+        }
+        return window.open(url, target, features);
+      }
+      try {
+        const module = await import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js?userId=${userId}`);
+        const activate = module.activate;  // 获取导出的 activate 函数
+        await activate?.({ 
+          ...newWindow, 
+          ...GM,
+          GM_registerMenuCommand: (name: string, fn: Function, accessKey?: string) => {
+            return GM.GM_registerMenuCommand(name, fn, accessKey, extension.name);
+          },
+          open, 
+          localStorage: newLocalStorage, 
+          sessionStorage: newSessionStorage 
+        }, document, new Fishpi(apiKey));
+      } catch (err) {
+        console.error(`激活扩展 ${extension.name} 失败:`, err);
+      }
+    })();
+
+    activationMap.set(item, promise);
+    return promise;
+  }
+
+  jsItems.forEach(item => activateExtension(item));
 
   themeItems.forEach(async item => {
     const extension: any = extensionData.find((e: any) => e.id === item)!;

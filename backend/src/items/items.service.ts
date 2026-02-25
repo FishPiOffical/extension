@@ -16,7 +16,7 @@ export class ItemsService {
     private usersService: UsersService,
   ) {}
 
-  async create(data: Partial<Item>, authorId: string, upgradeFromId?: number, isDraft: boolean = false): Promise<Item> {
+  async create(data: Partial<Item>, authorId: string, upgradeFromId?: number, isDraft: boolean = false, dependencyIds?: number[]): Promise<Item> {
     const author = await this.usersService.findById(authorId);
     
     let version = 1;
@@ -51,11 +51,19 @@ export class ItemsService {
       upgradeFrom = originalItem;
     }
 
+    let dependencies = [];
+    if (dependencyIds && dependencyIds.length > 0) {
+      dependencies = await this.itemsRepository.find({
+        where: dependencyIds.map(id => ({ id }))
+      });
+    }
+
     const item = this.itemsRepository.create({
       ...data,
       author,
       version,
       upgradeFrom,
+      dependencies,
       status: isDraft ? ItemStatus.DRAFT : ItemStatus.PENDING,
     });
     return this.itemsRepository.save(item);
@@ -65,7 +73,8 @@ export class ItemsService {
     const query = this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.purchasedBy', 'purchasedBy')
-      .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom');
+      .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
+      .leftJoinAndSelect('item.dependencies', 'dependencies');
     
     if (status) {
       query.where('item.status = :status', { status });
@@ -92,6 +101,7 @@ export class ItemsService {
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.purchasedBy', 'purchasedBy')
       .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
+      .leftJoinAndSelect('item.dependencies', 'dependencies')
       .where('author.username = :username', { username })
       .andWhere('item.status = :status', { status: ItemStatus.APPROVED });
     
@@ -112,8 +122,9 @@ export class ItemsService {
   async findOne(id: number, userId?: string): Promise<any> {
     const item = await this.itemsRepository.findOne({
       where: { id },
-      relations: ['author', 'purchasedBy'],
+      relations: ['author', 'purchasedBy', 'dependencies'],
     });
+
     if (!item) {
       throw new NotFoundException('没找到');
     }
@@ -127,6 +138,35 @@ export class ItemsService {
     }
 
     return { ...item, isEnabled };
+  }
+
+  async getRecursiveDependencies(itemId: number): Promise<Item[]> {
+    const item = await this.itemsRepository.findOne({
+      where: { id: itemId },
+      relations: ['dependencies'],
+    });
+    if (!item || !item.dependencies || item.dependencies.length === 0) {
+      return [];
+    }
+
+    const allDeps = new Map<number, Item>();
+    const stack = [...item.dependencies];
+
+    while (stack.length > 0) {
+      const dep = stack.pop()!;
+      if (!allDeps.has(dep.id)) {
+        allDeps.set(dep.id, dep);
+        const fullDep = await this.itemsRepository.findOne({
+          where: { id: dep.id },
+          relations: ['dependencies'],
+        });
+        if (fullDep?.dependencies) {
+          stack.push(...fullDep.dependencies);
+        }
+      }
+    }
+
+    return Array.from(allDeps.values());
   }
 
   async findVersions(id: number, userId?: string): Promise<Item[]> {
@@ -165,7 +205,13 @@ export class ItemsService {
   }
 
   async purchase(itemId: number, userId: string): Promise<Item> {
-    const item = await this.findOne(itemId);
+    const item = await this.itemsRepository.findOne({
+      where: { id: itemId },
+      relations: ['author', 'purchasedBy', 'dependencies'],
+    });
+    if (!item) {
+      throw new NotFoundException('没找到');
+    }
     const user = await this.usersService.findById(userId);
 
     if (item.status !== ItemStatus.APPROVED) {
@@ -223,12 +269,28 @@ export class ItemsService {
       item.purchasedBy = [];
     }
     item.purchasedBy.push(user);
-    return this.itemsRepository.save(item);
+    const savedItem = await this.itemsRepository.save(item);
+
+    // Handle dependencies: grant free ones automatically
+    if (item.dependencies && item.dependencies.length > 0) {
+      for (const dep of item.dependencies) {
+        if (dep.price === 0) {
+          try {
+            await this.purchase(dep.id, userId);
+          } catch (e) {
+            // Already owned or other error, ignore
+          }
+        }
+      }
+    }
+
+    return savedItem;
   }
 
   async getUserPurchases(userId: string) {
     const items = await this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
+      .leftJoinAndSelect('item.dependencies', 'dependencies')
       .leftJoin('item.purchasedBy', 'purchasedBy')
       .leftJoin(UserItemState, 'state', 'state.itemId = item.id AND state.userId = :userId', { userId })
       .where('purchasedBy.id = :userId OR (author.id = :userId AND state.id IS NOT NULL)', { userId })
@@ -379,6 +441,7 @@ export class ItemsService {
     return this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
+      .leftJoinAndSelect('item.dependencies', 'dependencies')
       .where('author.id = :userId', { userId })
       .orderBy('item.version', 'DESC')
       .addOrderBy('item.createdAt', 'DESC')
@@ -389,13 +452,14 @@ export class ItemsService {
     return this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
+      .leftJoinAndSelect('item.dependencies', 'dependencies')
       .where('author.id = :userId', { userId })
       .andWhere('item.status = :status', { status: ItemStatus.DRAFT })
       .orderBy('item.createdAt', 'DESC')
       .getMany();
   }
 
-  async updateDraft(id: number, data: Partial<Item>, userId: string): Promise<Item> {
+  async updateDraft(id: number, data: Partial<Item>, userId: string, dependencyIds?: number[]): Promise<Item> {
     const item = await this.itemsRepository.findOne({
       where: { id, status: ItemStatus.DRAFT },
       relations: ['author'],
@@ -407,6 +471,16 @@ export class ItemsService {
 
     if (item.author.id !== userId) {
       throw new UnauthorizedException('无权修改此草稿');
+    }
+
+    if (dependencyIds) {
+      if (dependencyIds.length > 0) {
+        item.dependencies = await this.itemsRepository.find({
+          where: dependencyIds.map(id => ({ id }))
+        });
+      } else {
+        item.dependencies = [];
+      }
     }
 
     Object.assign(item, data);

@@ -4,7 +4,9 @@ import { useRouter } from 'vue-router'
 import { getPurchasedItems, toggleItemState, getItems, purchaseItem } from '@/api/items'
 import message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
+import { useDependencyCheck } from '@/utils/hooks'
 
+const { checkDependencies } = useDependencyCheck()
 const router = useRouter()
 const items = ref<any[]>([])
 const latestItems = ref<any[]>([])
@@ -41,6 +43,12 @@ const handleUpgrade = async (item: any, latest: any) => {
   )
   if (!confirmed) return
 
+  if (!await checkDependencies(latest, {
+    title: '运行依赖提示',
+    messagePrefix: `新版本 v${latest.version || 1} 运行有以下依赖，请确保它们已启用`,
+    messageSuffix: '是否继续升级？'
+  })) return
+
   try {
     await purchaseItem(latest.id)
     message.success('升级成功！')
@@ -52,6 +60,11 @@ const handleUpgrade = async (item: any, latest: any) => {
 
 const toggleEnabled = async (item: any) => {
   const newState = !item.isEnabled
+  
+  if (newState && !await checkDependencies(item, {
+    messageSuffix: '是否继续启用？'
+  })) return
+
   try {
     await toggleItemState(item.id, newState)
     item.isEnabled = newState

@@ -7,7 +7,9 @@ import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
+import { useDependencyCheck } from '@/utils/hooks'
 
+const { checkDependencies } = useDependencyCheck()
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -91,13 +93,13 @@ const doPurchase = async () => {
       isUpdate ? '发现新版本' : '切换版本'
     )
     if (!confirmed) return
-  } else if (item.value!.price > 0) {
-    const confirmed = await MessageBox.confirm(
-      `确定消耗 ${item.value!.price} 积分购买 "${item.value!.name}" 吗？`,
-      '确认购买'
-    )
-    if (!confirmed) return
   }
+  
+  if (!await checkDependencies(item.value!, {
+    title: '确认为作品添加依赖',
+    messagePrefix: '此作品运行需要以下依赖，请确保您已单独安装并切换到对应版本',
+    messageSuffix: '是否继续安装当前作品？'
+  })) return
   
   purchasing.value = true
   try {
@@ -121,6 +123,12 @@ const copyCode = () => {
 const toggleEnabled = async () => {
   if (!item.value) return
   const newState = !item.value.isEnabled
+  
+  if (newState && !await checkDependencies(item.value, {
+    messagePrefix: '此作品运行有以下依赖，请确保它们已启用',
+    messageSuffix: '是否继续启用？'
+  })) return
+
   try {
     await toggleItemState(item.value.id, newState)
     if (!isPurchased.value && isAuthor.value) {
@@ -136,6 +144,11 @@ const toggleEnabled = async () => {
 
 const handleUseAuthorItem = async () => {
   if (!item.value) return
+  if (!await checkDependencies(item.value, {
+    title: '预览版本依赖提示',
+    messagePrefix: '此预览版本具有以下依赖，请确保它们已启用',
+    messageSuffix: '是否继续启用预览？'
+  })) return
   try {
     await toggleItemState(item.value.id, true)
     message.success('已开始使用该版本（开发者模式）')
@@ -207,6 +220,14 @@ onMounted(() => {
             <div v-if="item.matchUrls && item.matchUrls.length > 0" class="flex flex-wrap items-center gap-2">
               <span class="text-xs font-black uppercase tracking-widest opacity-40">生效网址:</span>
               <span v-for="url in item.matchUrls" :key="url" class="badge badge-sm badge-ghost opacity-60 font-mono">{{ url }}</span>
+            </div>
+
+            <div v-if="item.dependencies && item.dependencies.length > 0" class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-black uppercase tracking-widest opacity-40">依赖作品:</span>
+              <router-link v-for="dep in item.dependencies" :key="dep.id" :to="`/item/${dep.id}`" 
+                           class="badge badge-sm badge-primary badge-outline hover:bg-primary hover:text-primary-content transition-all font-bold">
+                {{ dep.name }} (v{{ dep.version }})
+              </router-link>
             </div>
             
             <div class="flex flex-wrap items-center gap-6 pt-2">

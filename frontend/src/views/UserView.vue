@@ -6,7 +6,9 @@ import { getItemsByAuthor, purchaseItem, getPurchasedItems } from '@/api/items'
 import { getUser, type UserProfile } from '@/api/user'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
+import { useDependencyCheck } from '@/utils/hooks'
 
+const { checkDependencies } = useDependencyCheck()
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
@@ -51,6 +53,12 @@ const handlePurchase = async (item: any) => {
     )
     if (!confirmed) return
   }
+
+  if (!await checkDependencies(item, {
+    title: '确认为作品添加依赖',
+    messagePrefix: '此作品运行需要以下依赖，请确保您已单独安装并切换到对应版本',
+    messageSuffix: '是否继续安装当前作品？'
+  })) return
 
   try {
     await purchaseItem(item.id)

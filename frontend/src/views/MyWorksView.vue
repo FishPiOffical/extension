@@ -5,7 +5,9 @@ import { useAuthStore } from '@/stores/auth'
 import { getMyPublishedItems, getMyDrafts, publishDraft, withdrawItem, deleteItem, getPurchasedItems, toggleItemState, type Item } from '@/api/items'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
+import { useDependencyCheck } from '@/utils/hooks'
 
+const { checkDependencies } = useDependencyCheck()
 const router = useRouter()
 const authStore = useAuthStore()
 const allItems = ref<Item[]>([])
@@ -133,6 +135,12 @@ const isUsing = (id: number) => {
 
 const handleToggleUse = async (item: Item) => {
   const currentlyUsing = isUsing(item.id)
+  
+  if (!currentlyUsing && !await checkDependencies(item, {
+    messagePrefix: '此预览版本具有以下依赖，请确保它们已启用',
+    messageSuffix: '是否继续启用？'
+  })) return
+
   try {
     await toggleItemState(item.id, !currentlyUsing)
     Message.success(currentlyUsing ? '已停止使用' : '已开始使用该版本')

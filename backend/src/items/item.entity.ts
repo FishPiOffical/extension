@@ -54,6 +54,10 @@ export class Item {
   @ManyToOne(() => Item, { nullable: true })
   upgradeFrom: Item;
 
+  @ManyToMany(() => Item)
+  @JoinTable()
+  dependencies: Item[];
+
   @ManyToMany(() => User, user => user.purchasedItems)
   @JoinTable()
   purchasedBy: User[];

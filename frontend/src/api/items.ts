@@ -22,6 +22,7 @@ export interface Item {
   matchUrls?: string[]
   upgradeFrom?: Item | number
   upgradeFromId?: number
+  dependencies?: Item[]
 }
 
 export interface UploadItemData {
@@ -34,6 +35,7 @@ export interface UploadItemData {
   matchUrls?: string[]
   upgradeFromId?: number
   isDraft?: boolean
+  dependencyIds?: number[]
 }
 
 export interface ReviewItemData {
@@ -95,6 +97,10 @@ export function getItemById(id: number) {
  */
 export function getItemVersions(id: number) {
   return request.get<Item[]>(`/items/${id}/versions`)
+}
+
+export function getItemDependencies(id: number) {
+  return request.get<Item[]>(`/items/${id}/dependencies`);
 }
 
 /**

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { uploadItem, getMyPublishedItems, getMyDrafts, updateDraft, publishDraft, type Item } from '@/api/items'
+import { uploadItem, getMyPublishedItems, getMyDrafts, getItems, updateDraft, publishDraft, type Item } from '@/api/items'
 import Message from '@/components/msg'
 
 const router = useRouter()
@@ -9,6 +9,7 @@ const route = useRoute()
 
 const mode = ref<'new' | 'upgrade'>('new')
 const myItems = ref<Item[]>([])
+const allApprovedItems = ref<Item[]>([])
 const selectedItemId = ref<number | null>(null)
 const editingDraftId = ref<number | null>(null)
 
@@ -19,9 +20,32 @@ const code = ref('')
 const matchUrls = ref('')
 const language = ref('javascript')
 const type = ref<'extension' | 'theme'>('extension')
+const selectedDependencyIds = ref<number[]>([])
 const uploading = ref(false)
 const error = ref('')
 const showFullScreenCode = ref(false)
+const showDependencyModal = ref(false)
+const dependencySearch = ref('')
+
+const availableDependencies = computed(() => {
+  const search = dependencySearch.value.toLowerCase()
+  return allApprovedItems.value.filter(i => 
+    i.id !== editingDraftId.value && 
+    i.id !== selectedItemId.value &&
+    !selectedDependencyIds.value.includes(i.id) &&
+    (i.name.toLowerCase().includes(search) || i.author?.username.toLowerCase().includes(search))
+  )
+})
+
+const addDependency = (id: number) => {
+  if (id && !selectedDependencyIds.value.includes(id)) {
+    selectedDependencyIds.value.push(id)
+  }
+}
+
+const removeDependency = (id: number) => {
+  selectedDependencyIds.value = selectedDependencyIds.value.filter(d => d !== id)
+}
 
 const upgradeableItems = computed(() => {
   // Only APPROVED items that don't have a PENDING or DRAFT upgrade
@@ -38,8 +62,12 @@ const upgradeableItems = computed(() => {
 
 onMounted(async () => {
   try {
-    const res = await getMyPublishedItems()
-    myItems.value = res.data
+    const [myRes, allRes] = await Promise.all([
+      getMyPublishedItems(),
+      getItems()
+    ])
+    myItems.value = myRes.data
+    allApprovedItems.value = allRes.data
   } catch(e) { console.error(e) }
 
   // Check if upgrading from an item
@@ -64,6 +92,7 @@ onMounted(async () => {
         language.value = draft.language
         code.value = draft.code
         matchUrls.value = (draft.matchUrls || []).join('\n')
+        selectedDependencyIds.value = (draft.dependencies || []).map((d: any) => d.id)
       }
     } catch(e) { console.error(e) }
   }
@@ -80,6 +109,7 @@ watch(selectedItemId, (newId) => {
       language.value = item.language
       code.value = item.code || ''
       matchUrls.value = (item.matchUrls || []).join('\n')
+      selectedDependencyIds.value = (item.dependencies || []).map((d: any) => d.id)
     }
   }
 })
@@ -104,6 +134,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
         code: code.value,
         language: language.value,
         matchUrls: matchUrls.value ? matchUrls.value.split('\n').map(u => u.trim()).filter(u => u) : [],
+        dependencyIds: selectedDependencyIds.value,
       })
       
       if (isDraft) {
@@ -124,8 +155,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
         language: language.value,
         matchUrls: matchUrls.value ? matchUrls.value.split('\n').map(u => u.trim()).filter(u => u) : [],
         upgradeFromId: mode.value === 'upgrade' && selectedItemId.value ? selectedItemId.value : undefined,
-        isDraft,
-      })
+        isDraft,        dependencyIds: selectedDependencyIds.value,      })
 
       if (isDraft) {
         Message.success('草稿已保存！')
@@ -237,6 +267,77 @@ const handleSubmit = async (isDraft: boolean = false) => {
               <div class="form-control w-full md:col-span-2">
                 <label class="label mb-2"><span class="text-xs font-black uppercase tracking-widest opacity-40">生效网址 (可选)</span></label>
                 <textarea v-model="matchUrls" placeholder="每行一个网址匹配模式，例如: /articles/* 或 https://fishpi.cn/*&#10;不填写则全局生效" class="textarea textarea-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 py-4 h-24 font-mono text-xs leading-relaxed"></textarea>
+              </div>
+
+              <div class="form-control w-full md:col-span-2">
+                <label class="label mb-2"><span class="text-xs font-black uppercase tracking-widest opacity-40">依赖扩展 (可选)</span></label>
+                <div class="flex flex-wrap gap-2 mb-3">
+                  <div v-for="id in selectedDependencyIds" :key="id" class="badge badge-primary badge-soft py-3 px-4 rounded-xl font-bold gap-2">
+                    {{ allApprovedItems.find(i => i.id === id)?.name }}
+                    <Icon icon="mdi:close" class="w-4 h-4 cursor-pointer hover:text-error transition-colors" @click="removeDependency(id)" />
+                  </div>
+                </div>
+                <button type="button" @click="showDependencyModal = true" class="btn btn-outline border-base-300 hover:border-primary hover:bg-primary/10 rounded-2xl h-14 flex items-center justify-between px-6 group transition-all">
+                  <span class="text-base-content/50 group-hover:text-primary">添加依赖扩展与主题...</span>
+                  <Icon icon="mdi:plus-circle-outline" class="w-5 h-5 opacity-40 group-hover:text-primary transition-all" />
+                </button>
+                
+                <dialog :class="['modal modal-bottom sm:modal-middle', { 'modal-open': showDependencyModal }]">
+                  <div class="modal-box w-full max-w-2xl bg-base-100 p-0 overflow-hidden flex flex-col h-[600px] rounded-3xl border border-base-200 shadow-2xl">
+                    <div class="p-6 bg-base-200 border-b border-base-300 flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <Icon icon="mdi:library-plus" class="text-primary w-6 h-6" />
+                        <h3 class="font-black uppercase tracking-tight text-lg">添加依赖</h3>
+                      </div>
+                      <button @click="showDependencyModal = false" class="btn btn-circle btn-ghost btn-sm">
+                        <Icon icon="mdi:close" class="w-5 h-5" />
+                      </button>
+                    </div>
+                    
+                    <div class="p-6 border-b border-base-200 bg-base-100">
+                      <div class="flex-1 input input-bordered w-full">
+                        <Icon icon="mdi:magnify" />
+                        <input
+                          v-model="dependencySearch"
+                          type="text"
+                          placeholder="搜索作品名称、作者..."
+                          class="grow"
+                        />
+                      </div>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto p-4 space-y-2 bg-base-100 scrollbar-style">
+                      <div v-if="availableDependencies.length === 0" class="flex flex-col items-center justify-center py-20 opacity-30">
+                        <Icon icon="mdi:shopping-search" class="w-12 h-12 mb-4" />
+                        <p class="font-bold">未找到匹配的作品</p>
+                      </div>
+                      <div 
+                        v-for="item in availableDependencies" 
+                        :key="item.id"
+                        class="flex items-center justify-between p-4 bg-base-200/50 hover:bg-base-200 rounded-2xl transition-all group"
+                      >
+                        <div class="flex items-center gap-4">
+                          <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" 
+                               :class="item.type === 'extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
+                            <Icon :icon="item.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p class="font-black text-sm">{{ item.name }}</p>
+                            <p class="text-[10px] opacity-40 font-bold">BY @{{ item.author?.username }} · V{{ item.version }}</p>
+                          </div>
+                        </div>
+                        <button @click="addDependency(item.id)" class="btn btn-sm btn-primary rounded-lg font-black text-[10px] uppercase opacity-0 group-hover:opacity-100 transition-opacity">
+                          选择并添加
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <form method="dialog" class="modal-backdrop">
+                    <button @click="showDependencyModal = false">关闭</button>
+                  </form>
+                </dialog>
+
+                <label class="label"><span class="label-text-alt opacity-40">当用户安装此作品时，会提示用户联动安装这些依赖。</span></label>
               </div>
 
               <div class="form-control w-full md:col-span-2">
