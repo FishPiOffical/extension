@@ -6,6 +6,7 @@ import {
   Param, 
   UseGuards, 
   Request,
+  Query,
   ForbiddenException,
   ParseIntPipe,
   Res,
@@ -62,10 +63,12 @@ export class ItemsController {
   }
 
   @Get(':id.js')
-  async getItemCode(@Param('id') id: number, @Res() res) {
+  async getItemCode(@Param('id') id: number, @Query('userId') userId: string, @Res() res) {
     const item = await this.itemsService.findOne(id);
     if (item.status !== ItemStatus.APPROVED) {
-      throw new ForbiddenException('Item not approved');
+      if (!userId || item.author.id !== userId) {
+        throw new ForbiddenException('Item not approved');
+      }
     }
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -86,10 +89,12 @@ export class ItemsController {
   }
 
   @Get(':id.css')
-  async getItemStyle(@Param('id', ParseIntPipe) id: number, @Res() res) {
+  async getItemStyle(@Param('id', ParseIntPipe) id: number, @Query('userId') userId: string, @Res() res) {
     const item = await this.itemsService.findOne(id);
     if (item.status !== ItemStatus.APPROVED) {
-      throw new ForbiddenException('Item not approved');
+      if (!userId || item.author.id !== userId) {
+        throw new ForbiddenException('Item not approved');
+      }
     }
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -129,6 +134,7 @@ export class ItemsController {
     res.send(loaderCode()
       .replace(/`{{#Ids}}`/, extensionIds.join(', '))
       .replace(/`{{#Themes}}`/, themeIds.join(', '))
+      .replace(/['"`]{{#UserId}}['"`]/, `'${user.id}'`)
       .replace(/\[`{{#ExtensionData}}`\]/, JSON.stringify(extensionData))
     );
   }
@@ -141,8 +147,8 @@ export class ItemsController {
 
   @Get(':id/versions')
   @UseGuards(JwtAuthGuard)
-  async getVersions(@Param('id', ParseIntPipe) id: number) {
-    return this.itemsService.findVersions(id);
+  async getVersions(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.itemsService.findVersions(id, req.user.userId);
   }
 
   @Post('upload')

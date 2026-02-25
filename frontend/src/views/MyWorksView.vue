@@ -2,13 +2,14 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { getMyPublishedItems, getMyDrafts, publishDraft, withdrawItem, deleteItem, type Item } from '@/api/items'
+import { getMyPublishedItems, getMyDrafts, publishDraft, withdrawItem, deleteItem, getPurchasedItems, toggleItemState, type Item } from '@/api/items'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const allItems = ref<Item[]>([])
+const myPurchases = ref<Item[]>([])
 const loading = ref(true)
 
 const searchQuery = ref('')
@@ -17,9 +18,10 @@ const typeFilter = ref<'all' | 'extension' | 'theme'>('all')
 const loadWorks = async () => {
   loading.value = true
   try {
-    const [publishedRes, draftsRes] = await Promise.all([
+    const [publishedRes, draftsRes, purchasesRes] = await Promise.all([
       getMyPublishedItems(),
-      getMyDrafts()
+      getMyDrafts(),
+      getPurchasedItems()
     ])
     // Merge everything
     const combined = [...publishedRes.data]
@@ -27,6 +29,7 @@ const loadWorks = async () => {
       if (!combined.find(c => c.id === d.id)) combined.push(d)
     })
     allItems.value = combined
+    myPurchases.value = (purchasesRes as any).data || []
   } catch (error) {
     console.error('Failed to load works:', error)
   }
@@ -121,6 +124,21 @@ const handlePublish = async (id: number) => {
     await loadWorks()
   } catch (err: any) {
     Message.error(err.response?.data?.msg || '发布失败')
+  }
+}
+
+const isUsing = (id: number) => {
+  return myPurchases.value.some(p => p.id === id)
+}
+
+const handleToggleUse = async (item: Item) => {
+  const currentlyUsing = isUsing(item.id)
+  try {
+    await toggleItemState(item.id, !currentlyUsing)
+    Message.success(currentlyUsing ? '已停止使用' : '已开始使用该版本')
+    await loadWorks()
+  } catch (error) {
+    console.error('Failed to toggle use:', error)
   }
 }
 
@@ -255,6 +273,11 @@ onMounted(() => {
                       拒绝理由: {{ item.reviewComment }}
                     </p>
                     <div class="flex gap-2">
+                      <button @click="handleToggleUse(item)" 
+                              class="btn btn-xs flex-1"
+                              :class="isUsing(item.id) ? 'btn-error' : 'btn-success'">
+                         {{ isUsing(item.id) ? '停用' : '使用' }}
+                      </button>
                       <button v-if="item.status === 'approved'" @click="router.push(`/item/${item.id}`)" class="btn btn-xs btn-ghost bg-base-100 flex-1">详情</button>
                       <button v-if="item.status === 'draft'" @click="editWork(item)" class="btn btn-xs btn-primary flex-1">编辑</button>
                       <button v-if="item.status === 'draft'" @click="handlePublish(item.id)" class="btn btn-xs btn-success flex-1">发布</button>

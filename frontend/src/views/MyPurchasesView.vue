@@ -108,6 +108,10 @@ onMounted(() => {
                <div class="badge font-black text-[8px] tracking-tight py-0 px-1.5 border-none">
                  v{{ item.version || 1 }}
                </div>
+               <div v-if="item.status && item.status !== 'approved'" 
+                    class="badge badge-warning badge-soft font-black text-[8px] tracking-tight py-0 px-1.5 border-none">
+                 {{ item.status.toUpperCase() }}
+               </div>
                <!-- Toggle Switch -->
                <div @click.stop class="form-control">
                  <input type="checkbox" 

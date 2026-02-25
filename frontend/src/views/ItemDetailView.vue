@@ -123,10 +123,25 @@ const toggleEnabled = async () => {
   const newState = !item.value.isEnabled
   try {
     await toggleItemState(item.value.id, newState)
-    item.value.isEnabled = newState
+    if (!isPurchased.value && isAuthor.value) {
+      await loadItem()
+    } else {
+      item.value.isEnabled = newState
+    }
     message.success(`${item.value.name} 已${newState ? '启用' : '禁用'}`)
   } catch (error) {
     console.error('Failed to toggle state:', error)
+  }
+}
+
+const handleUseAuthorItem = async () => {
+  if (!item.value) return
+  try {
+    await toggleItemState(item.value.id, true)
+    message.success('已开始使用该版本（开发者模式）')
+    await loadItem()
+  } catch (error) {
+    console.error('Failed to use author item:', error)
   }
 }
 
@@ -227,13 +242,25 @@ onMounted(() => {
               </div>
             </div>
 
-            <button v-if="!isPurchased" 
+            <button v-if="!isPurchased && !isAuthor" 
                     @click="doPurchase" 
                     :disabled="purchasing"
                     class="btn btn-primary btn-block rounded-xl h-12">
               <span v-if="purchasing" class="loading loading-spinner loading-xs"></span>
               {{ item.price > 0 ? '立即购买' : '免费获取' }}
             </button>
+            <div v-else-if="!isPurchased && isAuthor" class="space-y-3">
+              <button @click="handleUseAuthorItem" 
+                      class="btn btn-primary btn-block rounded-xl h-12">
+                使用此版本
+              </button>
+              <button v-if="item.code" 
+                      @click="copyCode" 
+                      class="btn btn-primary btn-outline btn-block rounded-xl h-12">
+                <Icon icon="mdi:content-copy" class="w-4 h-4 mr-2" />
+                复制代码
+              </button>
+            </div>
             <div v-else class="space-y-3">
               <div class="bg-base-200/50 p-3 rounded-xl flex items-center justify-between">
                 <span class="text-xs font-bold opacity-60">运行状态</span>

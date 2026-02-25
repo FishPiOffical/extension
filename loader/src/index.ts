@@ -141,6 +141,7 @@ async function activate() {
   }
   const jsItems = [`{{#Ids}}`];
   const themeItems = [`{{#Themes}}`];
+  const userId = '{{#UserId}}';
   const extensionData = [`{{#ExtensionData}}`];
 
   jsItems.forEach(async item => {
@@ -198,7 +199,7 @@ async function activate() {
       }
       return window.open(url, target, features);
     }
-    import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js`).then(module => {
+    import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js?userId=${userId}`).then(module => {
       const activate = module.activate;  // 获取导出的 activate 函数
       activate?.({ 
         ...newWindow, 
@@ -223,7 +224,7 @@ async function activate() {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.id = `theme-${item}`;
-    link.href = `${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.css`;
+    link.href = `${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.css?userId=${userId}`;
     document.head.appendChild(link);
   });
 }

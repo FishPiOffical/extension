@@ -129,7 +129,7 @@ export class ItemsService {
     return { ...item, isEnabled };
   }
 
-  async findVersions(id: number): Promise<Item[]> {
+  async findVersions(id: number, userId?: string): Promise<Item[]> {
     const item = await this.itemsRepository.findOne({
       where: { id },
       relations: ['author'],
@@ -138,14 +138,19 @@ export class ItemsService {
       throw new NotFoundException('找不到项目');
     }
 
-    // Find all items with same name, author and type that are APPROVED
+    const where: any = {
+      name: item.name,
+      author: { id: item.author.id },
+      type: item.type,
+    };
+
+    // If the requester is not the author, only show APPROVED versions
+    if (item.author.id !== userId) {
+      where.status = ItemStatus.APPROVED;
+    }
+
     return this.itemsRepository.find({
-      where: {
-        name: item.name,
-        author: { id: item.author.id },
-        type: item.type,
-        status: ItemStatus.APPROVED,
-      },
+      where,
       order: { version: 'DESC' },
     });
   }
@@ -225,7 +230,8 @@ export class ItemsService {
     const items = await this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoin('item.purchasedBy', 'purchasedBy')
-      .where('purchasedBy.id = :userId', { userId })
+      .leftJoin(UserItemState, 'state', 'state.itemId = item.id AND state.userId = :userId', { userId })
+      .where('purchasedBy.id = :userId OR (author.id = :userId AND state.id IS NOT NULL)', { userId })
       .getMany();
 
     const states = await this.itemStateRepository.find({
@@ -233,13 +239,32 @@ export class ItemsService {
       relations: ['item']
     });
 
-    return items.map(item => {
+    const mapped = items.map(item => {
       const state = states.find(s => s.item.id === item.id);
       return {
         ...item,
         isEnabled: state ? state.isEnabled : true
       };
     });
+
+    // 为同一个项目（同作者、同名、同类型）只保留一个版本
+    // 优先：1. 已启用的版本 2. 版本号更高的
+    const projects = new Map<string, any>();
+    for (const item of mapped) {
+      const key = `${item.name}-${item.author.id}-${item.type}`;
+      const existing = projects.get(key);
+      if (!existing) {
+        projects.set(key, item);
+      } else {
+        const itemWeight = (item.isEnabled ? 1000 : 0) + (item.version || 0);
+        const existingWeight = (existing.isEnabled ? 1000 : 0) + (existing.version || 0);
+        if (itemWeight > existingWeight) {
+          projects.set(key, item);
+        }
+      }
+    }
+
+    return Array.from(projects.values());
   }
 
   async toggleItemState(itemId: number, userId: string, isEnabled: boolean): Promise<any> {
@@ -257,6 +282,44 @@ export class ItemsService {
     
     if (!await query) {
       throw new UnauthorizedException('您尚未拥有此项目');
+    }
+
+    // 如果当前要开启，则关闭该项目（同作者、同名、同类型）的其他版本
+    if (isEnabled) {
+      const allVersions = await this.itemsRepository.find({
+        where: {
+          name: item.name,
+          author: { id: item.author.id },
+          type: item.type,
+        }
+      });
+      
+      for (const v of allVersions) {
+        if (v.id !== itemId) {
+          let otherState = await this.itemStateRepository.findOne({
+            where: { user: { id: userId }, item: { id: v.id } }
+          });
+          
+          if (!otherState) {
+            // 检查是否是通过 purchasedBy 默认开启的，如果是，则需要显式设为 false
+            const isVInRange = await this.itemsRepository.createQueryBuilder('item')
+              .leftJoin('item.purchasedBy', 'purchasedBy')
+              .where('item.id = :vid AND purchasedBy.id = :userId', { vid: v.id, userId })
+              .getCount() > 0;
+            
+            if (isVInRange) {
+               await this.itemStateRepository.save(this.itemStateRepository.create({
+                 user,
+                 item: { id: v.id } as any,
+                 isEnabled: false
+               }));
+            }
+          } else if (otherState.isEnabled) {
+            otherState.isEnabled = false;
+            await this.itemStateRepository.save(otherState);
+          }
+        }
+      }
     }
 
     let state = await this.itemStateRepository.findOne({
