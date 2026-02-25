@@ -283,7 +283,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 </button>
                 
                 <dialog :class="['modal modal-bottom sm:modal-middle', { 'modal-open': showDependencyModal }]">
-                  <div class="modal-box w-full max-w-2xl bg-base-100 p-0 overflow-hidden flex flex-col h-[600px] rounded-3xl border border-base-200 shadow-2xl">
+                  <div class="modal-box w-full max-w-2xl bg-base-100 p-0 overflow-hidden flex flex-col h-150 rounded-3xl border border-base-200 shadow-2xl">
                     <div class="p-6 bg-base-200 border-b border-base-300 flex items-center justify-between">
                       <div class="flex items-center gap-3">
                         <Icon icon="mdi:library-plus" class="text-primary w-6 h-6" />
