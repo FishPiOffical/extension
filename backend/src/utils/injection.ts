@@ -63,4 +63,6 @@ export const defaultAllowGlobals = [
   'GM_listValues',
   'GM_setValue',
   'GM_xmlhttpRequest',
+  'GM_registerMenuCommand',
+  'GM_addStyle',
 ]

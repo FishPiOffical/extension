@@ -1,6 +1,17 @@
 // 命名空间前缀：避免和站点自己的 localStorage key 冲突
 const PREFIX = "__GM__:";
 
+interface GM_MenuCommand {
+  name: string;
+  fn: Function;
+  accessKey?: string;
+  group?: string;
+}
+
+const menuCommands: GM_MenuCommand[] = [];
+let ballEl: HTMLElement | null = null;
+let menuListEl: HTMLElement | null = null;
+
 // 可选：按“脚本名”做隔离（你可以改成固定字符串或从 meta 里读）
 const SCRIPT_NS = "default-script";
 const nsKey = (key: string) => `${PREFIX}${SCRIPT_NS}:${String(key)}`;
@@ -42,6 +53,14 @@ export const GM_listValues = function () {
     if (k && k.startsWith(prefix)) keys.push(k.slice(prefix.length));
   }
   return keys;
+};
+
+// GM_addStyle(css)
+export const GM_addStyle = function (css: string) {
+  const style = document.createElement('style');
+  style.textContent = css;
+  (document.head || document.documentElement).appendChild(style);
+  return style;
 };
 
 function headersToObject(headerStr: string) {
@@ -176,4 +195,184 @@ export const GM_xmlhttpRequest = function(details: any) {
     // 方便调试/扩展：暴露原始 xhr
     _xhr: xhr,
   };
+};
+
+function injectMenuStyle() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('gm-menu-style')) return;
+  const style = document.createElement('style');
+  style.id = 'gm-menu-style';
+  style.textContent = `
+    .gm-floating-ball {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        cursor: pointer;
+        z-index: 1000001;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.2s, background-color 0.2s;
+        overflow: hidden;
+    }
+    .gm-floating-ball:hover {
+        transform: scale(1.1);
+        background-color: #f8f9fa;
+    }
+    .gm-floating-ball img {
+        object-fit: contain;
+    }
+    .gm-menu-list {
+        position: fixed;
+        bottom: 70px;
+        right: 20px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.05);
+        z-index: 1000001;
+        display: none;
+        flex-direction: column;
+        min-width: 180px;
+        max-width: 320px;
+        max-height: calc(100vh - 100px);
+        padding: 6px 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+        overflow-y: auto;
+        border: 1px solid rgba(0,0,0,0.08);
+        scrollbar-width: thin;
+        transform-origin: bottom right;
+    }
+    .gm-menu-list.show {
+        display: flex;
+        animation: gm-menu-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes gm-menu-fade-in {
+        from { opacity: 0; transform: translateY(10px) scale(0.95); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .gm-menu-group {
+        border-bottom: 1px solid #f0f0f0;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+    }
+    .gm-menu-group:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+    }
+    .gm-menu-group-title {
+        padding: 8px 16px 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #8c959f;
+        pointer-events: none;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    .gm-menu-item {
+        padding: 10px 20px;
+        cursor: pointer;
+        transition: background-color 0.15s, color 0.15s;
+        color: #1f2328;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .gm-menu-item:hover {
+        background-color: #f3f4f6;
+        color: #0969da;
+    }
+    .gm-menu-item:active {
+        background-color: #ebeef1;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function updateMenuUI() {
+  if (typeof document === 'undefined') return;
+  if (!document.body) {
+    window.addEventListener('load', updateMenuUI, { once: true });
+    return;
+  }
+  if (menuCommands.length === 0) return;
+
+  injectMenuStyle();
+
+  if (!ballEl) {
+    ballEl = document.createElement('div');
+    ballEl.className = 'gm-floating-ball';
+    ballEl.title = '脚本菜单';
+    ballEl.innerHTML = `<img src="https://fishpi.cn/images/faviconH.png" alt="GM Menu">`;
+    ballEl.onclick = (e) => {
+      e.stopPropagation();
+      menuListEl?.classList.toggle('show');
+    };
+    document.body.appendChild(ballEl);
+
+    document.addEventListener('click', () => {
+      menuListEl?.classList.remove('show');
+    });
+  }
+
+  if (!menuListEl) {
+    menuListEl = document.createElement('div');
+    menuListEl.className = 'gm-menu-list';
+    menuListEl.onclick = (e) => e.stopPropagation();
+    document.body.appendChild(menuListEl);
+  }
+
+  ballEl.style.display = 'flex';
+  menuListEl.innerHTML = '';
+  const groups: Record<string, GM_MenuCommand[]> = {};
+  menuCommands.forEach(cmd => {
+    const g = cmd.group || '';
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(cmd);
+  });
+
+  const sortedGroups = Object.keys(groups).sort((a, b) => {
+    if (a === '') return -1;
+    if (b === '') return 1;
+    return a.localeCompare(b);
+  });
+
+  for (const groupName of sortedGroups) {
+    const groupContainer = document.createElement('div');
+    groupContainer.className = 'gm-menu-group';
+    
+    if (groupName !== '') {
+      const gTitleEl = document.createElement('div');
+      gTitleEl.className = 'gm-menu-group-title';
+      gTitleEl.textContent = groupName;
+      groupContainer.appendChild(gTitleEl);
+    }
+
+    for (const cmd of groups[groupName]) {
+      const itemEl = document.createElement('div');
+      itemEl.className = 'gm-menu-item';
+      itemEl.textContent = cmd.name;
+      itemEl.title = cmd.name;
+      itemEl.onclick = () => {
+        cmd.fn();
+        menuListEl?.classList.remove('show');
+      };
+      groupContainer.appendChild(itemEl);
+    }
+    menuListEl.appendChild(groupContainer);
+  }
+}
+
+export const GM_registerMenuCommand = function (name: string, fn: any, accessKey?: string, group?: string) {
+  menuCommands.push({ name, fn, accessKey, group });
+  updateMenuUI();
 };

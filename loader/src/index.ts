@@ -127,8 +127,7 @@ async function activate() {
   const newWindow: any = pick(window, defaultAllowGlobals);
   const { apiKey } = await fetch('/getApiKeyInWeb').then((r) => r.json())
   newWindow.location = {
-    ...clone(location, newWindow),
-    ...readOnly(location, ['href', 'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash']),
+    ...readOnly(clone(location, window), ['href', 'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash']),
     get href() {
       return location.href;
     },
@@ -199,9 +198,19 @@ async function activate() {
       }
       return window.open(url, target, features);
     }
-    const module = await import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js`);  // 返回模块对象
-    const activate = module.activate;  // 获取导出的 activate 函数
-    await activate?.({ ...newWindow, ...GM, open, localStorage: newLocalStorage, sessionStorage: newSessionStorage }, document, new Fishpi(apiKey)).catch(console.error);
+    import(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}.js`).then(module => {
+      const activate = module.activate;  // 获取导出的 activate 函数
+      activate?.({ 
+        ...newWindow, 
+        ...GM,
+        GM_registerMenuCommand: (name: string, fn: Function, accessKey?: string) => {
+          return GM.GM_registerMenuCommand(name, fn, accessKey, extension.name);
+        },
+        open, 
+        localStorage: newLocalStorage, 
+        sessionStorage: newSessionStorage 
+      }, document, new Fishpi(apiKey)).catch(console.error);
+    });
   });
 
   themeItems.forEach(async item => {
