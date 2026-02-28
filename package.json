@@ -26,6 +26,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "fishpi": "^0.1.26"
+    "fishpi": "^0.1.27"
   }
 }
