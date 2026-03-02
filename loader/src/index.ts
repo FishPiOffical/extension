@@ -55,6 +55,7 @@ const defaultAllowGlobals = [
   'stop',
   'addEventListener',
   'removeEventListener',
+  'Element',
 ]
 
 function matchUrl(pattern: string, currentHref: string, currentPath: string) {
