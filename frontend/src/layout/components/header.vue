@@ -32,7 +32,7 @@ const logout = () => {
       <div class="flex items-center gap-4">
         <RouterLink to="/" class="flex items-center gap-2 group">
           <img src="@/assets/logo.svg" width="32" />
-          <span class="font-bold text-lg tracking-tight">鱼排扩展集市</span>
+          <span class="hidden md:inline font-bold text-lg tracking-tight">鱼排扩展集市</span>
         </RouterLink>
         
         <!-- Desktop Nav -->

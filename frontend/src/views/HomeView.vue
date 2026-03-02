@@ -113,8 +113,8 @@ onMounted(() => {
 
       <div class="flex flex-col md:flex-row gap-4 items-center flex-1 max-w-2xl lg:justify-end w-full">
         <!-- Search -->
-        <div class="flex-1 input input-bordered">
-          <Icon icon="mdi:magnify" />
+        <div class="flex-1 min-h-3em input transition-all">
+          <Icon icon="mdi:magnify" class="opacity-50" />
           <input
             v-model="searchQuery"
             type="text"
