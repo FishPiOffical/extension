@@ -16,4 +16,7 @@ export class UserItemState {
 
   @Column({ default: true, comment: '是否启用' })
   isEnabled: boolean;
+
+  @Column({ default: true, comment: '是否自动更新' })
+  isAutoUpdate: boolean;
 }

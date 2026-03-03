@@ -19,6 +19,7 @@ export interface Item {
   }
   purchasedBy?: Array<{ id: number; username: string }>
   isEnabled?: boolean
+  isAutoUpdate?: boolean
   matchUrls?: string[]
   upgradeFrom?: Item | number
   upgradeFromId?: number
@@ -128,7 +129,14 @@ export function purchaseItem(id: number) {
  * Toggle item enabled state
  */
 export function toggleItemState(id: number, isEnabled: boolean) {
-  return request.post<{ isEnabled: boolean }>(`/items/${id}/toggle`, { isEnabled })
+  return request.post<{ isEnabled: boolean; isAutoUpdate?: boolean }>(`/items/${id}/toggle`, { isEnabled })
+}
+
+/**
+ * Set item auto-update state
+ */
+export function setAutoUpdate(id: number, isAutoUpdate: boolean) {
+  return request.post<{ isAutoUpdate: boolean }>(`/items/${id}/auto-update`, { isAutoUpdate })
 }
 
 /**

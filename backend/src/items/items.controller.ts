@@ -226,6 +226,16 @@ export class ItemsController {
     return this.itemsService.toggleItemState(id, req.user.userId, body.isEnabled);
   }
 
+  @Post(':id/auto-update')
+  @UseGuards(JwtAuthGuard)
+  async setAutoUpdate(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { isAutoUpdate: boolean },
+    @Request() req
+  ) {
+    return this.itemsService.setAutoUpdate(id, req.user.userId, body.isAutoUpdate);
+  }
+
   @Post('draft/:id/update')
   @UseGuards(JwtAuthGuard)
   async updateDraft(

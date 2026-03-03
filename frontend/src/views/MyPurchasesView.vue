@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPurchasedItems, toggleItemState, getItems, purchaseItem } from '@/api/items'
+import { getPurchasedItems, toggleItemState, getItems, purchaseItem, setAutoUpdate } from '@/api/items'
 import message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
@@ -58,6 +58,22 @@ const handleUpgrade = async (item: any, latest: any) => {
   }
 }
 
+const toggleAutoUpdate = async (item: any) => {
+  // Toggle locally first or wait? Let's wait.
+  // Actually usually toggles are optimistic or wait. 
+  // Given the backend logic (switching versions might affect it), let's wait.
+  const newState = !item.isAutoUpdate
+  try {
+    const res = await setAutoUpdate(item.id, newState)
+    if (res.data) {
+      item.isAutoUpdate = res.data.isAutoUpdate
+      message.success(`${item.name} 自动更新已${item.isAutoUpdate ? '开启' : '关闭'}`)
+    }
+  } catch (error) {
+    console.error('Failed to toggle auto update:', error)
+  }
+}
+
 const toggleEnabled = async (item: any) => {
   const newState = !item.isEnabled
   
@@ -66,9 +82,14 @@ const toggleEnabled = async (item: any) => {
   })) return
 
   try {
-    await toggleItemState(item.id, newState)
-    item.isEnabled = newState
-    message.success(`${item.name} 已${newState ? '启用' : '禁用'}`)
+    const res = await toggleItemState(item.id, newState)
+    if (res.data) {
+      item.isEnabled = res.data.isEnabled
+      if (res.data.isAutoUpdate !== undefined) {
+        item.isAutoUpdate = res.data.isAutoUpdate
+      }
+      message.success(`${item.name} 已${item.isEnabled ? '启用' : '禁用'}`)
+    }
   } catch (error) {
     console.error('Failed to toggle state:', error)
   }
@@ -118,19 +139,31 @@ onMounted(() => {
               <router-link :to="`/user/${item.author?.username}`" @click.stop class="text-xs opacity-40 mt-1 hover:text-primary transition-colors block">@{{ item.author?.username }}</router-link>
             </div>
             <div class="flex flex-col items-end gap-2">
-               <div class="badge font-black text-[8px] tracking-tight py-0 px-1.5 border-none">
-                 v{{ item.version || 1 }}
+               <div class="flex flex-col gap-1 items-end">
+                 <div class="badge font-black text-[8px] tracking-tight py-0 px-1.5 border-none">
+                   v{{ item.version || 1 }}
+                 </div>
+                 <div v-if="item.status && item.status !== 'approved'" 
+                      class="badge badge-warning badge-soft font-black text-[8px] tracking-tight py-0 px-1.5 border-none">
+                   {{ item.status.toUpperCase() }}
+                 </div>
                </div>
-               <div v-if="item.status && item.status !== 'approved'" 
-                    class="badge badge-warning badge-soft font-black text-[8px] tracking-tight py-0 px-1.5 border-none">
-                 {{ item.status.toUpperCase() }}
-               </div>
-               <!-- Toggle Switch -->
-               <div @click.stop class="form-control">
-                 <input type="checkbox" 
-                        class="toggle toggle-xs toggle-primary" 
-                        :checked="item.isEnabled" 
-                        @change="toggleEnabled(item)" />
+               
+               <div class="flex items-center gap-2 mt-1">
+                 <!-- Auto Update Checkbox -->
+                 <div v-if="item.isEnabled" @click.stop class="tooltip tooltip-left" data-tip="自动更新">
+                   <input type="checkbox" 
+                          class="toggle toggle-xs toggle-success" 
+                          :checked="item.isAutoUpdate" 
+                          @change="toggleAutoUpdate(item)" />
+                 </div>
+                 <!-- Toggle Switch -->
+                 <div @click.stop class="tooltip tooltip-left" :data-tip="item.isEnabled ? '已启用' : '已禁用'">
+                   <input type="checkbox" 
+                          class="toggle toggle-xs toggle-primary" 
+                          :checked="item.isEnabled" 
+                          @change="toggleEnabled(item)" />
+                 </div>
                </div>
             </div>
           </div>

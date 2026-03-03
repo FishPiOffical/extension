@@ -130,14 +130,18 @@ export class ItemsService {
     }
 
     let isEnabled = true;
+    let isAutoUpdate = true;
     if (userId) {
       const state = await this.itemStateRepository.findOne({
         where: { user: { id: userId }, item: { id } }
       });
-      if (state) isEnabled = state.isEnabled;
+      if (state) {
+        isEnabled = state.isEnabled;
+        isAutoUpdate = state.isAutoUpdate;
+      }
     }
 
-    return { ...item, isEnabled };
+    return { ...item, isEnabled, isAutoUpdate };
   }
 
   async getRecursiveDependencies(itemId: number): Promise<Item[]> {
@@ -305,7 +309,8 @@ export class ItemsService {
       const state = states.find(s => s.item.id === item.id);
       return {
         ...item,
-        isEnabled: state ? state.isEnabled : true
+        isEnabled: state ? state.isEnabled : true,
+        isAutoUpdate: state ? state.isAutoUpdate : true
       };
     });
 
@@ -318,8 +323,8 @@ export class ItemsService {
       if (!existing) {
         projects.set(key, item);
       } else {
-        const itemWeight = (item.isEnabled ? 1000 : 0) + (item.version || 0);
-        const existingWeight = (existing.isEnabled ? 1000 : 0) + (existing.version || 0);
+        const itemWeight = (item.isEnabled ? 1000 : 0) + (item.isAutoUpdate ? 0 : 2000) + (item.version || 0);
+        const existingWeight = (existing.isEnabled ? 1000 : 0) + (existing.isAutoUpdate ? 0 : 2000) + (existing.version || 0);
         if (itemWeight > existingWeight) {
           projects.set(key, item);
         }
@@ -392,14 +397,74 @@ export class ItemsService {
       state = this.itemStateRepository.create({
         user,
         item,
-        isEnabled
+        isEnabled,
+        isAutoUpdate: true
       });
     } else {
       state.isEnabled = isEnabled;
     }
 
+    // 如果启用了特定版本，检查是否为最新版本
+    if (isEnabled) {
+      const allVersions = await this.itemsRepository.find({
+        where: {
+          name: item.name,
+          author: { id: item.author.id },
+          type: item.type,
+        },
+        order: { version: 'DESC' },
+        take: 1
+      });
+
+      if (allVersions.length > 0) {
+        const latestVersion = allVersions[0];
+        // 如果启用的版本不是最新版本，则关闭自动更新
+        if (item.version < latestVersion.version) {
+          state.isAutoUpdate = false;
+        } else {
+          // 如果启用的版本是最新版本，则开启自动更新
+          state.isAutoUpdate = true;
+        }
+      }
+    }
+
     await this.itemStateRepository.save(state);
-    return { isEnabled: state.isEnabled };
+    return { isEnabled: state.isEnabled, isAutoUpdate: state.isAutoUpdate };
+  }
+
+  async setAutoUpdate(itemId: number, userId: string, isAutoUpdate: boolean): Promise<any> {
+    const user = await this.usersService.findById(userId);
+    const item = await this.findOne(itemId);
+
+    // Check if user actually owns it
+    const query = this.itemsRepository.createQueryBuilder('item')
+      .leftJoin('item.purchasedBy', 'purchasedBy')
+      .leftJoin('item.author', 'author')
+      .where('item.id = :itemId', { itemId })
+      .andWhere('(purchasedBy.id = :userId OR author.id = :userId)', { userId })
+      .getOne();
+    
+    if (!await query) {
+      throw new UnauthorizedException('您尚未拥有此项目');
+    }
+
+    let state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } }
+    });
+
+    if (!state) {
+      state = this.itemStateRepository.create({
+        user,
+        item,
+        isEnabled: true, // Default enabled if creating state for the first time
+        isAutoUpdate
+      });
+    } else {
+      state.isAutoUpdate = isAutoUpdate;
+    }
+
+    await this.itemStateRepository.save(state);
+    return { isAutoUpdate: state.isAutoUpdate };
   }
 
   async withdraw(id: number, userId: string): Promise<Item> {

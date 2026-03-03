@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getItemById, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, type Item } from '@/api/items'
+import { getItemById, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, setAutoUpdate, type Item } from '@/api/items'
 import { useAuthStore } from '@/stores/auth'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
@@ -135,10 +135,35 @@ const toggleEnabled = async () => {
       await loadItem()
     } else {
       item.value.isEnabled = newState
+      if (item.value.isEnabled && item.value.isAutoUpdate === undefined) {
+          // If enabling, we might want to check if auto-update is set?
+          // The backend returns the new state.
+          // Wait, toggleItemState returns { isEnabled, isAutoUpdate } now.
+      }
+      // Re-fetch item to be safe or update from response if possible.
+      // The toggleItemState API returns { isEnabled, isAutoUpdate }
+      // But here we are just awaiting it. Let's update it to use the response.
     }
+    // We need to re-fetch or use response because enabling might change auto-update state (e.g. enabling old version disables auto-update)
+    await loadItem() 
+    
     message.success(`${item.value.name} 已${newState ? '启用' : '禁用'}`)
   } catch (error) {
     console.error('Failed to toggle state:', error)
+  }
+}
+
+const toggleAutoUpdate = async () => {
+  if (!item.value) return
+  const newState = !item.value.isAutoUpdate
+  try {
+    const res = await setAutoUpdate(item.value.id, newState)
+    if (res.data) {
+      item.value.isAutoUpdate = res.data.isAutoUpdate
+      message.success(`${item.value.name} 自动更新已${item.value.isAutoUpdate ? '开启' : '关闭'}`)
+    }
+  } catch (error) {
+    console.error('Failed to toggle auto update:', error)
   }
 }
 
@@ -289,6 +314,13 @@ onMounted(() => {
                        class="toggle toggle-sm toggle-primary" 
                        :checked="item.isEnabled" 
                        @change="toggleEnabled" />
+              </div>
+              <div v-if="item.isEnabled" class="bg-base-200/50 p-3 rounded-xl flex items-center justify-between">
+                <span class="text-xs font-bold opacity-60">自动更新</span>
+                <input type="checkbox" 
+                       class="toggle toggle-sm toggle-success" 
+                       :checked="item.isAutoUpdate" 
+                       @change="toggleAutoUpdate" />
               </div>
               <button v-if="item.code" 
                       @click="copyCode" 
