@@ -255,12 +255,12 @@ export class ItemsService {
 
       if (item.price > 0 && user.id !== item.author.id) {
         const type = {
-          javascript: '扩展',
-          css: '主题',
+          extension: '扩展',
+          theme: '主题',
         }[item.type];
         await this.usersService.updatePoints(user.username, -item.price, `购买${type} ${item.name}`);
         await this.usersService.updatePoints(item.author.username, item.price * 0.7, `出售${type} ${item.name}`);
-        await this.usersService.updatePoints(item.author.username, item.price * 0.3, `买卖${type} ${item.name} 手续费`);
+        await this.usersService.updatePoints('admin', item.price * 0.3, `买卖${type} ${item.name} 手续费`);
       }
     }
 
