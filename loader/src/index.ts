@@ -90,7 +90,7 @@ function readOnly(obj: any, fields: string[]) {
 function pick(obj: any, fields: string[]) {
     const result: any = {};
     fields.forEach(field => {
-      if (obj.hasOwnProperty(field)) {
+      if (obj[field] !== undefined) {
         if (obj[field] instanceof Function) {
           result[field] = obj[field].bind(obj);
         }
