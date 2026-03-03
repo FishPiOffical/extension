@@ -122,12 +122,22 @@ export class ItemsService {
   async findOne(id: number, userId?: string): Promise<any> {
     const item = await this.itemsRepository.findOne({
       where: { id },
-      relations: ['author', 'purchasedBy', 'dependencies'],
+      relations: ['author', 'dependencies'],
     });
 
     if (!item) {
       throw new NotFoundException('没找到');
     }
+
+    const isPurchased = userId ? await this.itemsRepository.createQueryBuilder('item')
+      .leftJoin('item.purchasedBy', 'purchasedBy')
+      .where('item.id = :id AND purchasedBy.id = :userId', { id, userId })
+      .getCount() > 0 : false;
+
+    const purchaseCount = await this.itemsRepository.createQueryBuilder('item')
+      .leftJoin('item.purchasedBy', 'purchasedBy')
+      .where('item.id = :id', { id })
+      .getCount();
 
     let isEnabled = true;
     let isAutoUpdate = true;
@@ -141,7 +151,7 @@ export class ItemsService {
       }
     }
 
-    return { ...item, isEnabled, isAutoUpdate };
+    return { ...item, isEnabled, isAutoUpdate, isPurchased, purchaseCount };
   }
 
   async getRecursiveDependencies(itemId: number): Promise<Item[]> {
@@ -200,12 +210,91 @@ export class ItemsService {
   }
 
   async review(id: number, status: ItemStatus, comment?: string): Promise<Item> {
-    const item = await this.findOne(id);
+    const item = await this.itemsRepository.findOne({
+      where: { id },
+      relations: ['upgradeFrom', 'author'],
+    });
+
+    if (!item) {
+      throw new NotFoundException('没找到');
+    }
+
     item.status = status;
     if (comment) {
       item.reviewComment = comment;
     }
-    return this.itemsRepository.save(item);
+    
+    const savedItem = await this.itemsRepository.save(item);
+
+    if (status === ItemStatus.APPROVED && item.upgradeFrom) {
+      // 1. 获取显式设置了自动更新的用户状态
+      const previousStates = await this.itemStateRepository.find({
+        where: { 
+          item: { id: item.upgradeFrom.id },
+          isAutoUpdate: true
+        },
+        relations: ['user']
+      });
+
+      // 2. 获取拥有旧版本但没有显式设置过状态的用户（默认视为开启自动更新且启用状态）
+      const itemWithPurchasers = await this.itemsRepository.findOne({
+        where: { id: item.upgradeFrom.id },
+        relations: ['purchasedBy']
+      });
+      const ownersToUpdate = [...previousStates.map(s => ({ user: s.user, wasEnabled: s.isEnabled, state: s }))];
+
+      if (itemWithPurchasers && itemWithPurchasers.purchasedBy) {
+        const userIdsWithState = previousStates.map(s => s.user.id);
+        for (const user of itemWithPurchasers.purchasedBy) {
+          if (!userIdsWithState.includes(user.id)) {
+            ownersToUpdate.push({ user, wasEnabled: true, state: null });
+          }
+        }
+      }
+
+      for (const { user, wasEnabled, state } of ownersToUpdate) {
+        // Remove old version state if exists
+        if (state) {
+          await this.itemStateRepository.remove(state);
+        }
+
+        // Enable new version
+        let newState = await this.itemStateRepository.findOne({
+          where: { user: { id: user.id }, item: { id: item.id } }
+        });
+
+        if (newState) {
+          newState.isEnabled = wasEnabled;
+          newState.isAutoUpdate = true;
+          await this.itemStateRepository.save(newState);
+        } else {
+          newState = this.itemStateRepository.create({
+            user: user,
+            item: item,
+            isEnabled: wasEnabled,
+            isAutoUpdate: true
+          });
+          await this.itemStateRepository.save(newState);
+        }
+
+        // Transfer ownership
+        try {
+          await this.itemsRepository.createQueryBuilder()
+            .relation(Item, 'purchasedBy')
+            .of(item.id)
+            .add(user.id);
+          
+          await this.itemsRepository.createQueryBuilder()
+            .relation(Item, 'purchasedBy')
+            .of(item.upgradeFrom.id)
+            .remove(user.id);
+        } catch (e) {
+          console.error(`Failed to transfer ownership for user ${user.id}`, e);
+        }
+      }
+    }
+
+    return savedItem;
   }
 
   async purchase(itemId: number, userId: string): Promise<Item> {
