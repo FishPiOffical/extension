@@ -47,7 +47,7 @@ request.interceptors.response.use(
       const { data } = error.response
       
       // Handle specific error codes if they follow standard format
-      if (data && data.code === 40101) {
+      if (data && (data.code === 40101 || data.code == 401)) {
         // Token expired
         localStorage.removeItem('token')
         window.location.href = '/api/auth/login'
