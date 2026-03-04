@@ -49,8 +49,24 @@ const removeDependency = (id: number) => {
 
 const upgradeableItems = computed(() => {
   // Only APPROVED items that don't have a PENDING or DRAFT upgrade
-  return myItems.value.filter(item => {
-    if (item.status !== 'approved') return false
+  // AND only include the latest version of each work
+  const itemsByOriginalId: Record<number, Item> = {}
+
+  myItems.value.forEach(item => {
+    if (item.status !== 'approved') return
+    
+    // Determine the root work ID (either the item itself or what it upgraded from)
+    const rootId = item.upgradeFrom 
+      ? (typeof item.upgradeFrom === 'object' ? (item.upgradeFrom as any).id : item.upgradeFrom)
+      : item.id
+
+    // Check if this item is a later version than what we've seen for this root
+    if (!itemsByOriginalId[rootId] || (item.version || 1) > (itemsByOriginalId[rootId].version || 1)) {
+      itemsByOriginalId[rootId] = item
+    }
+  })
+
+  return Object.values(itemsByOriginalId).filter(item => {
     // Check if any other item in myItems has upgradeFrom === item.id
     const hasActiveUpgrade = myItems.value.some(other => {
       const parentId = typeof other.upgradeFrom === 'object' ? (other.upgradeFrom as any)?.id : other.upgradeFrom
