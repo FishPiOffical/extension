@@ -204,14 +204,17 @@ export class ItemsService {
     }
 
     const isPurchased = userId ? await this.itemsRepository.createQueryBuilder('item')
-      .leftJoin('item.purchasedBy', 'purchasedBy')
+      .innerJoin('item.purchasedBy', 'purchasedBy')
       .where('item.id = :id AND purchasedBy.id = :userId', { id, userId })
       .getCount() > 0 : false;
 
-    const purchaseCount = await this.itemsRepository.createQueryBuilder('item')
+    const purchaseCountResult = await this.itemsRepository.createQueryBuilder('item')
       .leftJoin('item.purchasedBy', 'purchasedBy')
       .where('item.id = :id', { id })
-      .getCount();
+      .select('COUNT(purchasedBy.id)', 'count')
+      .getRawOne();
+    
+    const purchaseCount = parseInt(purchaseCountResult?.count || '0', 10);
 
     let isEnabled = true;
     let isAutoUpdate = true;
