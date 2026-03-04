@@ -264,4 +264,43 @@ export class ItemsController {
   async publishDraft(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.itemsService.publishDraft(id, req.user.userId);
   }
+
+  @Post(':id/comments')
+  @UseGuards(JwtAuthGuard)
+  async addComment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { content: string; parentId?: number },
+    @Request() req,
+  ) {
+    return this.itemsService.addComment(id, req.user.userId, body.content, body.parentId);
+  }
+
+  @Get(':id/comments')
+  async getComments(@Param('id', ParseIntPipe) id: number) {
+    return this.itemsService.getComments(id);
+  }
+
+  @Post('comments/:id/block')
+  @UseGuards(JwtAuthGuard)
+  async blockComment(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.itemsService.blockComment(id, req.user.userId);
+  }
+
+  @Post('comments/:id/report')
+  @UseGuards(JwtAuthGuard)
+  async reportComment(@Param('id', ParseIntPipe) id: number) {
+    return this.itemsService.reportComment(id);
+  }
+
+  @Get('comments/reported')
+  @UseGuards(JwtAuthGuard)
+  async getReportedComments(@Request() req) {
+    return this.itemsService.getReportedComments(req.user.userId);
+  }
+
+  @Post('comments/:id/ignore')
+  @UseGuards(JwtAuthGuard)
+  async ignoreReport(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.itemsService.ignoreReport(id, req.user.userId);
+  }
 }

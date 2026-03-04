@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request, Param } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, Param, Query, ParseIntPipe } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { UsersService } from './users.service';
 
@@ -18,5 +18,14 @@ export class UsersController {
   @Get(':username')
   async getUser(@Param('username') username: string) {
     return this.usersService.findOne(username);
+  }
+
+  @Get(':id/comments')
+  async getUserComments(
+    @Param('id') id: string,
+    @Query('page', new ParseIntPipe({ optional: true })) page: number = 1,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit: number = 10,
+  ) {
+    return this.usersService.findUserComments(id, page, limit);
   }
 }

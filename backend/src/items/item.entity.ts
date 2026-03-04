@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, ManyToMany, JoinTable } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, ManyToMany, JoinTable, OneToMany } from 'typeorm';
 import { User } from '../users/user.entity';
+import { Comment } from './comment.entity';
 
 export enum ItemType {
   EXTENSION = 'extension',
@@ -67,4 +68,7 @@ export class Item {
 
   @Column({ nullable: true, comment: '审核意见' })
   reviewComment: string;
+
+  @OneToMany(() => Comment, comment => comment.item)
+  comments: Comment[];
 }

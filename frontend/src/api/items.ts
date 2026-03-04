@@ -13,11 +13,11 @@ export interface Item {
   createdAt: string
   reviewComment?: string
   author: {
-    id: number
+    id: string
     username: string
     avatar: string
   }
-  purchasedBy?: Array<{ id: number; username: string }>
+  purchaseCount: number
   isEnabled?: boolean
   isAutoUpdate?: boolean
   matchUrls?: string[]
@@ -25,6 +25,23 @@ export interface Item {
   upgradeFromId?: number
   dependencies?: Item[]
 }
+
+export interface Comment {
+  id: number
+  content: string
+  createdAt: string
+  isBlocked: boolean
+  reportCount: number
+  isHandled: boolean
+  author: {
+    username: string
+    avatar: string
+    nickname: string
+  }
+  item?: Item
+  replies?: Comment[]
+}
+
 
 export interface UploadItemData {
   name: string
@@ -172,4 +189,46 @@ export function updateDraft(id: number, data: Partial<UploadItemData>) {
  */
 export function publishDraft(id: number) {
   return request.post<Item>(`/items/draft/${id}/publish`)
+}
+
+/**
+ * Get item comments
+ */
+export function getComments(id: number) {
+  return request.get<Comment[]>(`/items/${id}/comments`)
+}
+
+/**
+ * Add comment
+ */
+export function addComment(id: number, content: string, parentId?: number) {
+  return request.post<Comment>(`/items/${id}/comments`, { content, parentId })
+}
+
+/**
+ * Block comment (Admin only)
+ */
+export function blockComment(id: number) {
+  return request.post(`/items/comments/${id}/block`)
+}
+
+/**
+ * Report comment
+ */
+export function reportComment(id: number) {
+  return request.post(`/items/comments/${id}/report`)
+}
+
+/**
+ * Get reported comments (Admin only)
+ */
+export function getReportedComments() {
+  return request.get<Comment[]>('/items/comments/reported')
+}
+
+/**
+ * Ignore report (Admin only)
+ */
+export function ignoreReport(id: number) {
+  return request.post(`/items/comments/${id}/ignore`)
 }

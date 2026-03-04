@@ -23,3 +23,10 @@ export function getUserProfile() {
 export function getUser(username: string) {
   return request.get<UserProfile>(`/users/${username}`)
 }
+
+/**
+ * Get user comments with pagination
+ */
+export function getUserComments(id: string, page: number = 1, limit: number = 10) {
+  return request.get<{ items: any[], total: number }>(`/users/${id}/comments`, { params: { page, limit } })
+}

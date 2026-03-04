@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThan, IsNull, Repository } from 'typeorm';
 import { Item, ItemStatus } from './item.entity';
+import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
+import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
 import Fishpi from 'fishpi';
 
@@ -13,6 +15,9 @@ export class ItemsService {
     private itemsRepository: Repository<Item>,
     @InjectRepository(UserItemState)
     private itemStateRepository: Repository<UserItemState>,
+    @InjectRepository(Comment)
+    private commentRepository: Repository<Comment>,
+    @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
   ) {}
 
@@ -117,6 +122,75 @@ export class ItemsService {
     });
     
     return query.getMany();
+  }
+
+  async addComment(itemId: number, userId: string, content: string, parentId?: number): Promise<Comment> {
+    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
+    if (!item) throw new NotFoundException('找不到此项目');
+
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new NotFoundException('找不到此用户');
+
+    let parent = null;
+    if (parentId) {
+      parent = await this.commentRepository.findOne({ where: { id: parentId } });
+      if (!parent) throw new NotFoundException('找不到父评论');
+    }
+
+    const comment = this.commentRepository.create({
+      content,
+      authorId: userId,
+      itemId: itemId,
+      parentId: parentId,
+    });
+
+    return this.commentRepository.save(comment);
+  }
+
+  async getComments(itemId: number): Promise<Comment[]> {
+    return this.commentRepository.find({
+      where: { itemId: itemId, parentId: IsNull() },
+      relations: ['author', 'replies', 'replies.author'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async blockComment(commentId: number, adminId: string): Promise<Comment> {
+    const admin = await this.usersService.findById(adminId);
+    if (!admin || !admin.isAdmin) throw new ForbiddenException('仅管理员可执行此操作');
+
+    const comment = await this.commentRepository.findOne({ where: { id: commentId } });
+    if (!comment) throw new NotFoundException('找不到此评论');
+
+    comment.isBlocked = true;
+    comment.isHandled = true;
+    return this.commentRepository.save(comment);
+  }
+
+  async reportComment(commentId: number): Promise<Comment> {
+    const comment = await this.commentRepository.findOne({ where: { id: commentId } });
+    if (!comment) throw new NotFoundException('找不到此评论');
+    comment.reportCount += 1;
+    return this.commentRepository.save(comment);
+  }
+
+  async getReportedComments(adminId: string): Promise<Comment[]> {
+    const admin = await this.usersService.findById(adminId);
+    if (!admin || !admin.isAdmin) throw new ForbiddenException('仅管理员可访问');
+    return this.commentRepository.find({
+      where: { reportCount: MoreThan(0), isHandled: false }, // reportCount > 0
+      relations: ['author', 'item'],
+      order: { reportCount: 'DESC', createdAt: 'DESC' },
+    });
+  }
+
+  async ignoreReport(commentId: number, adminId: string): Promise<Comment> {
+    const admin = await this.usersService.findById(adminId);
+    if (!admin || !admin.isAdmin) throw new ForbiddenException('仅管理员可执行');
+    const comment = await this.commentRepository.findOne({ where: { id: commentId } });
+    if (!comment) throw new NotFoundException('找不到此评论');
+    comment.isHandled = true;
+    return this.commentRepository.save(comment);
   }
 
   async findOne(id: number, userId?: string): Promise<any> {

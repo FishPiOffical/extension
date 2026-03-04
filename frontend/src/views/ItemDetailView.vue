@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getItemById, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, setAutoUpdate, type Item } from '@/api/items'
+import { getItemById, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, setAutoUpdate, type Item, getComments, addComment, blockComment, type Comment, reportComment } from '@/api/items'
 import { useAuthStore } from '@/stores/auth'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
@@ -20,18 +20,25 @@ const myPurchases = ref<Item[]>([])
 const loading = ref(true)
 const purchasing = ref(false)
 
+const comments = ref<Comment[]>([])
+const commentContent = ref('')
+const replyingTo = ref<Comment | null>(null)
+const sendingComment = ref(false)
+
 const loadItem = async () => {
   loading.value = true
   try {
     const id = parseInt(route.params.id as string)
-    const [itemRes, versionsRes, purchasesRes] = await Promise.all([
+    const [itemRes, versionsRes, purchasesRes, commentsRes] = await Promise.all([
       getItemById(id),
       getItemVersions(id),
-      authStore.isAuthenticated ? getPurchasedItems() : Promise.resolve({ data: [] })
+      authStore.isAuthenticated ? getPurchasedItems() : Promise.resolve({ data: [] }),
+      getComments(id)
     ])
     item.value = itemRes.data
     versions.value = versionsRes.data
     myPurchases.value = (purchasesRes as any).data || []
+    comments.value = commentsRes.data
   } catch (error) {
     console.error('Failed to load item:', error)
     message.error('加载作品详情失败')
@@ -41,6 +48,51 @@ const loadItem = async () => {
   await nextTick()
   if (item.value?.code) {
     highlightCode()
+  }
+}
+
+const submitComment = async () => {
+  if (!commentContent.value.trim()) return
+  if (!authStore.isAuthenticated) {
+    message.error('请先登录')
+    return
+  }
+
+  sendingComment.value = true
+  try {
+    await addComment(item.value!.id, commentContent.value, replyingTo.value?.id)
+    commentContent.value = ''
+    replyingTo.value = null
+    message.success('回复成功')
+    // Refresh comments
+    const res = await getComments(item.value!.id)
+    comments.value = res.data
+  } catch (error) {
+    message.error('回复失败')
+  } finally {
+    sendingComment.value = false
+  }
+}
+
+const doBlockComment = async (id: number) => {
+  if (!await MessageBox.confirm('确定要屏蔽此回复吗？这将对所有用户不可见。', '屏蔽确认')) return
+  try {
+    await blockComment(id)
+    message.success('已屏蔽')
+    const res = await getComments(item.value!.id)
+    comments.value = res.data
+  } catch (error) {
+    message.error('操作失败')
+  }
+}
+
+const doReportComment = async (id: number) => {
+  if (!await MessageBox.confirm('确定要举报此评论吗？恶意举报可能会影响您的账号信誉。', '举报确认')) return
+  try {
+    await reportComment(id)
+    message.success('举报成功，管理员将进行处理')
+  } catch (error) {
+    message.error('举报失败')
   }
 }
 
@@ -270,7 +322,7 @@ onMounted(() => {
               </div>
               <div class="flex items-center gap-2 text-sm opacity-50">
                 <Icon icon="mdi:download-outline" class="w-4 h-4" />
-                安装量 {{ item.purchasedBy?.length || 0 }}
+                安装量 {{ item.purchaseCount }}
               </div>
             </div>
           </div>
@@ -360,9 +412,107 @@ onMounted(() => {
          <h3 class="text-lg font-bold opacity-40">获取后即可查看源码</h3>
          <p class="text-sm opacity-30 mt-2">支持 {{ item.language }} 格式的高亮代码预览</p>
       </div>
+
+      <!-- Comments Section -->
+      <div class="space-y-6 pt-8">
+        <h2 class="text-2xl font-black border-b border-base-200 pb-4">
+          评论回复 ({{ comments.length }})
+        </h2>
+        
+        <!-- Comment Input -->
+        <div v-if="authStore.isAuthenticated" class="bg-base-100 border border-base-200 p-6 rounded-3xl space-y-4">
+          <div v-if="replyingTo" class="flex items-center justify-between text-sm px-4 py-2 bg-base-200 rounded-xl">
+            <span>正在回复 <b>@{{ replyingTo.author.nickname || replyingTo.author.username }}</b></span>
+            <button @click="replyingTo = null" class="btn btn-ghost btn-xs">取消回复</button>
+          </div>
+          <textarea v-model="commentContent" 
+                    class="textarea textarea-bordered w-full h-24 rounded-2xl resize-none focus:textarea-primary"
+                    :placeholder="replyingTo ? '请输入回复内容...' : '说说你的看法...'"></textarea>
+          <div class="flex justify-end">
+             <button @click="submitComment" 
+                     :disabled="!commentContent.trim() || sendingComment"
+                     class="btn btn-primary btn-sm rounded-xl px-6">
+                {{ sendingComment ? '发送中...' : '提交回复' }}
+             </button>
+          </div>
+        </div>
+        <div v-else class="text-center py-8 bg-base-200/30 rounded-3xl border border-dashed border-base-200">
+          <p class="text-base-content/50">请 <a href="/api/auth/login" class="text-primary link">登录</a> 后发表评论</p>
+        </div>
+
+        <!-- Comments List -->
+        <div class="space-y-8">
+          <div v-for="c in comments" :key="c.id" class="space-y-4">
+            <!-- Main Comment -->
+            <div class="flex gap-4">
+              <img :src="c.author.avatar" class="w-10 h-10 rounded-xl shrink-0" alt="Avatar">
+              <div class="flex-1 space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold">{{ c.author.nickname || c.author.username }}</span>
+                  <span class="text-[10px] opacity-40 uppercase tracking-widest">{{ new Date(c.createdAt).toLocaleString() }}</span>
+                  <div v-if="authStore.user?.isAdmin" class="ml-auto flex gap-2">
+                    <div class="tooltip tooltip-left" data-tip="管理员屏蔽">
+                      <button v-if="!c.isBlocked" @click="doBlockComment(c.id)" class="btn btn-ghost btn-xs btn-circle text-error">
+                        <Icon icon="mdi:eye-off-outline" class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="c.isBlocked" class="p-3 bg-base-200 rounded-2xl text-sm italic opacity-40">此条评论已被管理员屏蔽</div>
+                <div v-else class="text-sm leading-relaxed whitespace-pre-wrap">{{ c.content }}</div>
+                <div v-if="!c.isBlocked && authStore.isAuthenticated" class="flex gap-3">
+                  <div class="tooltip tooltip-top" data-tip="回复TA">
+                    <button @click="replyingTo = c" class="btn btn-ghost btn-xs btn-circle text-primary">
+                      <Icon icon="mdi:reply" class="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div class="tooltip tooltip-top" data-tip="举报">
+                    <button @click="doReportComment(c.id)" class="btn btn-ghost btn-xs btn-circle text-error/60">
+                      <Icon icon="mdi:flag-outline" class="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Replies -->
+                <div v-if="c.replies?.length" class="mt-4 space-y-4 border-l-2 border-base-200 ml-2 pl-6">
+                  <div v-for="r in c.replies" :key="r.id" class="flex gap-3">
+                     <img :src="r.author.avatar" class="w-8 h-8 rounded-lg shrink-0" alt="Avatar">
+                     <div class="flex-1 space-y-1">
+                        <div class="flex items-center gap-2">
+                          <span class="font-bold text-sm">{{ r.author.nickname || r.author.username }}</span>
+                          <span class="text-[9px] opacity-40 uppercase tracking-widest">{{ new Date(r.createdAt).toLocaleString() }}</span>
+                          <div v-if="authStore.user?.isAdmin" class="ml-auto">
+                            <div class="tooltip tooltip-left" data-tip="管理员屏蔽">
+                              <button v-if="!r.isBlocked" @click="doBlockComment(r.id)" class="btn btn-ghost btn-xs btn-circle text-error">
+                                <Icon icon="mdi:eye-off-outline" class="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                        <div v-if="r.isBlocked" class="p-2 bg-base-200 rounded-xl text-xs italic opacity-40">此条回复已被管理员屏蔽</div>
+                        <div v-else class="text-xs leading-relaxed whitespace-pre-wrap">{{ r.content }}</div>
+                        <div v-if="!r.isBlocked && authStore.isAuthenticated" class="flex gap-4">
+                           <div class="tooltip tooltip-top" data-tip="举报">
+                              <button @click="doReportComment(r.id)" class="btn btn-ghost btn-xs btn-circle text-error/60">
+                                <Icon icon="mdi:flag-outline" class="w-3 h-3" />
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="comments.length === 0" class="text-center py-10 opacity-30">
+            暂无评论，快来抢沙发吧~
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
+
 
 <style scoped>
 pre {

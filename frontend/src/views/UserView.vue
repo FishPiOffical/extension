@@ -3,7 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getItemsByAuthor, purchaseItem, getPurchasedItems } from '@/api/items'
-import { getUser, type UserProfile } from '@/api/user'
+import { getUser, getUserComments, type UserProfile } from '@/api/user'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
@@ -14,6 +14,10 @@ const router = useRouter()
 const authStore = useAuthStore()
 const items = ref<any[]>([])
 const user = ref<UserProfile | null>(null)
+const userComments = ref<any[]>([])
+const commentsTotal = ref(0)
+const commentsPage = ref(1)
+const commentsLoading = ref(false)
 const myPurchases = ref<any[]>([])
 const loading = ref(true)
 const activeTab = ref('all')
@@ -30,11 +34,29 @@ const loadData = async () => {
     user.value = userRes.data
     items.value = itemsRes.data
     myPurchases.value = purchasesRes.data
+    
+    // Load comments only after user is loaded
+    if (user.value) {
+       loadComments()
+    }
   } catch (error) {
     console.error('Failed to load user data:', error)
     Message.error('加载用户信息失败')
   }
   loading.value = false
+}
+
+const loadComments = async () => {
+  if (!user.value) return
+  commentsLoading.value = true
+  try {
+    const res = await getUserComments(user.value.id, commentsPage.value)
+    userComments.value = res.data.items
+    commentsTotal.value = res.data.total
+  } catch (error) {
+    console.error('Failed to load comments:', error)
+  }
+  commentsLoading.value = false
 }
 
 const handlePurchase = async (item: any) => {
@@ -146,6 +168,11 @@ watch(() => route.params.username, () => {
           class="btn btn-sm join-item px-4"
           :class="activeTab === 'theme' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
         >主题</button>
+        <button 
+          @click="activeTab = 'comments'" 
+          class="btn btn-sm join-item px-4"
+          :class="activeTab === 'comments' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
+        >评论 ({{ commentsTotal }})</button>
       </div>
     </header>
 
@@ -154,13 +181,43 @@ watch(() => route.params.username, () => {
       <span class="loading loading-dots loading-lg text-primary"></span>
     </div>
 
-    <!-- Empty State -->
+    <!-- Comments Tab -->
+    <div v-else-if="activeTab === 'comments'" class="space-y-6">
+       <div v-if="commentsLoading" class="flex justify-center py-20">
+          <span class="loading loading-dots loading-lg text-primary"></span>
+       </div>
+       <div v-else-if="userComments.length === 0" class="text-center py-20 opacity-50">
+          <p>这位小伙伴还没有发表过评论呢~</p>
+       </div>
+       <div v-else class="space-y-4 max-w-4xl mx-auto">
+          <div v-for="c in userComments" :key="c.id" class="bg-base-100 border border-base-200 rounded-2xl p-6 hover:border-primary/20 hover:shadow-md transition-all">
+             <div class="flex items-center gap-2 mb-3 text-[10px] uppercase font-black tracking-widest opacity-40">
+                <Icon icon="mdi:clock-outline" class="w-3 h-3" />
+                {{ new Date(c.createdAt).toLocaleString() }}
+                <span class="mx-2">·</span>
+                <Icon icon="mdi:cube-outline" class="w-3 h-3" />
+                <span>来自作品: <router-link :to="`/item/${c.itemId}`" class="hover:text-primary transition-colors cursor-pointer text-base-content underline decoration-dashed underline-offset-4">{{ c.item?.name || '未知作品' }}</router-link></span>
+             </div>
+             <div v-if="c.isBlocked" class="p-3 bg-base-200 rounded-xl text-sm italic opacity-40">此条评论已被管理员屏蔽</div>
+             <div v-else class="text-sm leading-relaxed whitespace-pre-wrap">{{ c.content }}</div>
+          </div>
+          
+          <div class="flex justify-center gap-2 pt-6" v-if="commentsTotal > 10">
+             <button @click="commentsPage--; loadComments()" :disabled="commentsPage === 1" class="btn btn-sm btn-outline">上一页</button>
+             <span class="btn btn-sm btn-ghost no-animation">第 {{ commentsPage }} 页</span>
+             <button @click="commentsPage++; loadComments()" :disabled="commentsPage * 10 >= commentsTotal" class="btn btn-sm btn-outline">下一页</button>
+          </div>
+       </div>
+    </div>
+
+    <!-- Empty State for Items -->
     <div v-else-if="filteredItems.length === 0" class="text-center py-20 opacity-50">
-      <p>这位小伙伴还没有发布任何作品呢~</p>
+      <p>这位小伙伴还没有发布这类型的作品呢~</p>
     </div>
 
     <!-- Items Grid -->
     <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+
       <div v-for="item in filteredItems" :key="item.id" 
         @click="router.push(`/item/${item.id}`)"
         class="group bg-base-100 border border-base-200 rounded-xl hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 flex flex-col p-5 cursor-pointer">

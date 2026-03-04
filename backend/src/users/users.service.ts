@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './user.entity';
+import { Comment } from '../items/comment.entity';
 import Fishpi, { FingerTo, UserInfo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
 
@@ -10,7 +11,20 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Comment)
+    private commentRepository: Repository<Comment>,
   ) {}
+
+  async findUserComments(userId: string, page: number = 1, limit: number = 10): Promise<{ items: Comment[], total: number }> {
+    const [items, total] = await this.commentRepository.findAndCount({
+      where: { authorId: userId },
+      relations: ['item'],
+      order: { createdAt: 'DESC' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+    return { items, total };
+  }
 
   async save(user: UserInfo): Promise<User> {
     let account: User = await this.findById(user.oId);

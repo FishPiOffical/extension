@@ -1,28 +1,54 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed } from 'vue'
-import { getPendingItems, reviewItem } from '@/api/items'
+import { getPendingItems, reviewItem, getReportedComments, blockComment, ignoreReport, type Comment } from '@/api/items'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import Message from '@/components/msg'
 import { CodeDiff } from 'v-code-diff'
 
 const items = ref<any[]>([])
+const reportedComments = ref<Comment[]>([])
 const loading = ref(true)
+const activeTab = ref<'items' | 'comments'>('items')
 const selectedItem = ref<any>(null)
 const reviewComment = ref('')
 const viewMode = ref<'code' | 'diff'>('code')
 
 const hasHistory = computed(() => !!selectedItem.value?.upgradeFrom)
 
-const loadPendingItems = async () => {
+const loadData = async () => {
   loading.value = true
   try {
-    const response = await getPendingItems()
-    items.value = response.data
+    const [itemsRes, commentsRes] = await Promise.all([
+      getPendingItems(),
+      getReportedComments()
+    ])
+    items.value = itemsRes.data
+    reportedComments.value = commentsRes.data
   } catch (error) {
-    console.error('Failed to load pending items:', error)
+    console.error('Failed to load data:', error)
   }
   loading.value = false
+}
+
+const handleBlockComment = async (id: number) => {
+  try {
+    await blockComment(id)
+    Message.success('已屏蔽该评论')
+    loadData()
+  } catch (error) {
+    Message.error('操作失败')
+  }
+}
+
+const handleIgnoreReport = async (id: number) => {
+  try {
+    await ignoreReport(id)
+    Message.success('已忽略该举报')
+    loadData()
+  } catch (error) {
+    Message.error('操作失败')
+  }
 }
 
 const openReviewModal = async (item: any) => {
@@ -45,7 +71,7 @@ const review = async (itemId: number, status: 'approved' | 'rejected') => {
     await reviewItem(itemId, { status, comment: reviewComment.value || undefined })
     Message.success('审核操作已完成')
     selectedItem.value = null
-    await loadPendingItems()
+    await loadData()
   } catch (error: any) {
     console.error('Review failed:', error)
     Message.error(error.response?.data?.msg || error.message || '审核失败')
@@ -53,7 +79,7 @@ const review = async (itemId: number, status: 'approved' | 'rejected') => {
 }
 
 onMounted(() => {
-  loadPendingItems()
+  loadData()
 })
 </script>
 
@@ -61,16 +87,20 @@ onMounted(() => {
   <div class="max-w-6xl mx-auto py-12 px-4 pb-32">
     <div class="flex flex-col md:flex-row justify-between items-end mb-16 px-4 gap-6">
       <div class="max-w-xl">
-        <h1 class="text-4xl font-black tracking-tighter text-base-content uppercase leading-none mb-4">审核控制台</h1>
-        <p class="text-base-content/40 font-medium">请仔细审查社区提交的代码。确保没有恶意脚本、性能问题或违规内容。</p>
+        <h1 class="text-4xl font-black tracking-tighter text-base-content uppercase leading-none mb-4">管理控制台</h1>
+        <div class="flex gap-2 mb-4">
+          <button @click="activeTab = 'items'" 
+                  :class="activeTab === 'items' ? 'bg-primary text-primary-content' : 'bg-base-200'"
+                  class="btn btn-sm rounded-xl">作品审核 ({{ items.length }})</button>
+          <button @click="activeTab = 'comments'" 
+                  :class="activeTab === 'comments' ? 'bg-primary text-primary-content' : 'bg-base-200'"
+                  class="btn btn-sm rounded-xl">举报处理 ({{ reportedComments.length }})</button>
+        </div>
+        <p class="text-base-content/40 font-medium">维护社区秩序，处理违规内容。</p>
       </div>
       
       <div class="flex items-center gap-4 bg-base-100 p-3 rounded-2xl border border-base-200">
-        <div class="text-right">
-          <div class="text-[10px] font-black opacity-30 uppercase tracking-tighter">待处理任务</div>
-          <div class="text-xl font-black text-primary">{{ items.length }}</div>
-        </div>
-        <button @click="loadPendingItems" class="btn btn-ghost btn-sm rounded-xl">
+        <button @click="loadData" class="btn btn-ghost btn-sm rounded-xl">
            <Icon icon="mdi:refresh" class="h-4 w-4" />
         </button>
       </div>
@@ -80,7 +110,8 @@ onMounted(() => {
       <div class="loading loading-spinner loading-lg text-primary opacity-20"></div>
     </div>
 
-    <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- Items Grid -->
+    <div v-if="!loading && activeTab === 'items'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div v-for="item in items" :key="item.id" 
            @click="openReviewModal(item)"
            class="bg-base-200 border border-base-200 rounded-3xl p-6 hover:border-primary/20 hover:shadow-xl transition-all cursor-pointer group">
@@ -108,6 +139,49 @@ onMounted(() => {
           <Icon icon="mdi:check-all" class="h-8 w-8" />
         </div>
         <p class="text-base-content/20 text-lg font-black uppercase tracking-widest italic">没有更多的待审核项目</p>
+      </div>
+    </div>
+
+    <!-- Comments List -->
+    <div v-if="!loading && activeTab === 'comments'" class="space-y-6">
+      <div v-if="reportedComments.length === 0" class="text-center py-20 opacity-30">
+        <div class="w-20 h-20 bg-base-200 rounded-3xl flex items-center justify-center mx-auto mb-6 text-base-content/20">
+          <Icon icon="mdi:check-circle-outline" class="w-10 h-10" />
+        </div>
+        <p class="text-xl font-bold uppercase tracking-widest italic">暂无待处理的举报</p>
+      </div>
+      <div v-for="comment in reportedComments" :key="comment.id" 
+           class="bg-base-100 border border-base-200 rounded-[2.5rem] p-8 flex flex-col md:flex-row gap-8 items-start hover:shadow-xl transition-all border-l-4 border-l-error">
+        <div class="flex-1 space-y-4">
+          <div class="flex items-center gap-4">
+            <img :src="comment.author.avatar" class="w-12 h-12 rounded-2xl shadow-sm" alt="Avatar">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-black text-lg">{{ comment.author.nickname || comment.author.username }}</span>
+                <span class="badge badge-error badge-sm font-black uppercase text-[10px]">被举报 {{ comment.reportCount }} 次</span>
+              </div>
+              <div class="text-[10px] opacity-40 font-bold uppercase tracking-widest">{{ new Date(comment.createdAt).toLocaleString() }}</div>
+            </div>
+          </div>
+          <div class="p-6 bg-base-200/50 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap border border-base-200/50">
+            {{ comment.content }}
+          </div>
+          <div v-if="comment.item" class="flex items-center gap-2 text-[10px]">
+            <span class="opacity-40 uppercase font-black tracking-widest">来自作品:</span>
+            <router-link :to="`/item/${comment.item.id}`" class="link link-primary font-black">{{ comment.item.name }}</router-link>
+          </div>
+        </div>
+        
+        <div class="flex md:flex-col gap-3 shrink-0">
+          <button @click="handleBlockComment(comment.id)" 
+                  class="btn btn-error btn-sm rounded-xl px-6 min-w-32 h-10">
+            屏蔽处理
+          </button>
+          <button @click="handleIgnoreReport(comment.id)" 
+                  class="btn btn-ghost btn-outline btn-sm rounded-xl px-6 min-w-32 h-10">
+            忽略举报
+          </button>
+        </div>
       </div>
     </div>
 
