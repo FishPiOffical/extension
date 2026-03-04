@@ -212,13 +212,15 @@ function injectMenuStyle() {
         background: #fff;
         border-radius: 50%;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        cursor: pointer;
+        cursor: move;
         z-index: 1000001;
         display: none;
         align-items: center;
         justify-content: center;
         transition: transform 0.2s, background-color 0.2s;
         overflow: hidden;
+        user-select: none;
+        touch-action: none;
     }
     .gm-floating-ball:hover {
         transform: scale(1.1);
@@ -313,9 +315,99 @@ function updateMenuUI() {
     ballEl.className = 'gm-floating-ball';
     ballEl.title = '脚本菜单';
     ballEl.innerHTML = `<img src="https://fishpi.cn/images/faviconH.png" alt="GM Menu">`;
+
+    // 拖拽移动支持
+    let isDragging = false;
+    let startX: number, startY: number;
+    let initialLeft: number, initialTop: number;
+
+    const savedPos = safeParse(localStorage.getItem('__GM__:menu-ball-pos'));
+    if (savedPos) {
+      ballEl.style.bottom = 'auto';
+      ballEl.style.right = 'auto';
+      ballEl.style.left = savedPos.x + 'px';
+      ballEl.style.top = savedPos.y + 'px';
+    }
+
+    const startDrag = (e: MouseEvent | TouchEvent) => {
+      isDragging = false;
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      startX = clientX;
+      startY = clientY;
+      const rect = ballEl!.getBoundingClientRect();
+      initialLeft = rect.left;
+      initialTop = rect.top;
+
+      const onDragging = (ev: MouseEvent | TouchEvent) => {
+        const curX = 'touches' in ev ? ev.touches[0].clientX : (ev as MouseEvent).clientX;
+        const curY = 'touches' in ev ? ev.touches[0].clientY : (ev as MouseEvent).clientY;
+        if (!isDragging && (Math.abs(curX - startX) > 5 || Math.abs(curY - startY) > 5)) {
+          isDragging = true;
+          ballEl!.style.transition = 'none';
+        }
+        if (isDragging) {
+          let nx = initialLeft + (curX - startX);
+          let ny = initialTop + (curY - startY);
+          // 边界限制
+          nx = Math.max(0, Math.min(window.innerWidth - 40, nx));
+          ny = Math.max(0, Math.min(window.innerHeight - 40, ny));
+          ballEl!.style.left = nx + 'px';
+          ballEl!.style.top = ny + 'px';
+          ballEl!.style.bottom = 'auto';
+          ballEl!.style.right = 'auto';
+
+          // 更新菜单位置
+          if (menuListEl) {
+             menuListEl.style.bottom = 'auto';
+             menuListEl.style.right = 'auto';
+             menuListEl.style.left = Math.max(10, Math.min(window.innerWidth - 190, nx - 140)) + 'px';
+             menuListEl.style.top = Math.max(10, Math.min(window.innerHeight - 200, ny - (menuListEl.offsetHeight || 0) - 10)) + 'px';
+          }
+        }
+      };
+
+      const stopDrag = () => {
+        document.removeEventListener('mousemove', onDragging);
+        document.removeEventListener('mouseup', stopDrag);
+        document.removeEventListener('touchmove', onDragging);
+        document.removeEventListener('touchend', stopDrag);
+        if (isDragging) {
+          ballEl!.style.transition = '';
+          const rect = ballEl!.getBoundingClientRect();
+          localStorage.setItem('__GM__:menu-ball-pos', JSON.stringify({ x: rect.left, y: rect.top }));
+        }
+      };
+
+      document.addEventListener('mousemove', onDragging);
+      document.addEventListener('mouseup', stopDrag);
+      document.addEventListener('touchmove', onDragging, { passive: false });
+      document.addEventListener('touchend', stopDrag);
+    };
+
+    ballEl.addEventListener('mousedown', startDrag);
+    ballEl.addEventListener('touchstart', startDrag, { passive: false });
+
     ballEl.onclick = (e) => {
+      if (isDragging) return;
       e.stopPropagation();
-      menuListEl?.classList.toggle('show');
+      if (menuListEl) {
+        const isShow = menuListEl.classList.toggle('show');
+        if (isShow) {
+           const rect = ballEl!.getBoundingClientRect();
+           menuListEl.style.bottom = 'auto';
+           menuListEl.style.right = 'auto';
+           // 尽量在球的正上方或合适位置
+           let left = rect.left - 140;
+           let top = rect.top - (menuListEl.offsetHeight || 0) - 10;
+           if (left < 10) left = 10;
+           if (top < 10) top = rect.bottom + 10;
+           if (left + 180 > window.innerWidth) left = window.innerWidth - 190;
+           
+           menuListEl.style.left = left + 'px';
+           menuListEl.style.top = top + 'px';
+        }
+      }
     };
     document.body.appendChild(ballEl);
 
