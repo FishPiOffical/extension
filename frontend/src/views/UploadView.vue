@@ -3,9 +3,12 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { uploadItem, getMyPublishedItems, getMyDrafts, getItems, updateDraft, publishDraft, type Item } from '@/api/items'
 import Message from '@/components/msg'
+import DevDocsModal from '@/components/docs/DevDocsModal.vue'
 
 const router = useRouter()
 const route = useRoute()
+
+const devDocsRef = ref<InstanceType<typeof DevDocsModal> | null>(null)
 
 const mode = ref<'new' | 'upgrade'>('new')
 const myItems = ref<Item[]>([])
@@ -198,9 +201,15 @@ const handleSubmit = async (isDraft: boolean = false) => {
           <Icon icon="mdi:code-tags" class="h-8 w-8" />
         </div>
         <h1 class="text-4xl font-black tracking-tight text-base-content mb-4 uppercase">分享作品</h1>
-        <p class="text-lg text-base-content/40 font-medium leading-relaxed">
+        <p class="text-lg text-base-content/40 font-medium leading-relaxed mb-6">
           将您的创意带到社区。请确保您的代码清晰、无毒且对他人有益。
         </p>
+
+        <!-- 新增入口按钮 -->
+        <button type="button" @click="devDocsRef?.open()" class="btn btn-outline btn-sm hover:border-primary hover:text-primary transition-colors">
+          <Icon icon="mdi:book-open-page-variant" />
+          查阅扩展开发指南
+        </button>
         
         <div class="mt-12 space-y-6">
           <div class="flex items-center gap-4">
@@ -432,6 +441,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
           </form>
         </div>
       </div>
+      <DevDocsModal ref="devDocsRef" />
     </div>
   </div>
 </template>

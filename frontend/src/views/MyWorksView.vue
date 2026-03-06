@@ -5,7 +5,10 @@ import { useAuthStore } from '@/stores/auth'
 import { getMyPublishedItems, getMyDrafts, publishDraft, withdrawItem, deleteItem, getPurchasedItems, toggleItemState, type Item } from '@/api/items'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
+import DevDocsModal from '@/components/docs/DevDocsModal.vue'
 import { useDependencyCheck } from '@/utils/hooks'
+
+const devDocsRef = ref<InstanceType<typeof DevDocsModal> | null>(null)
 
 const { checkDependencies } = useDependencyCheck()
 const router = useRouter()
@@ -195,6 +198,10 @@ onMounted(() => {
               <Icon icon="mdi:account-circle-outline" />
               查看公共主页
             </router-link>
+            <button @click="devDocsRef?.open()" class="btn btn-xs btn-ghost gap-1 text-primary hover:bg-primary/10">
+              <Icon icon="mdi:book-open-page-variant" />
+              开发指南
+            </button>
           </h1>
           <p class="text-xs text-base-content/50 mt-0.5 whitespace-nowrap">管理您创建的所有作品及其版本</p>
         </div>
@@ -317,5 +324,6 @@ onMounted(() => {
         </div>
       </div>
     </main>
+    <DevDocsModal ref="devDocsRef" />
   </div>
 </template>
