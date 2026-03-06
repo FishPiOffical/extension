@@ -19,4 +19,7 @@ export class UserItemState {
 
   @Column({ default: true, comment: '是否自动更新' })
   isAutoUpdate: boolean;
+
+  @Column({ type: 'simple-json', nullable: true, comment: '配置数据' })
+  storage: Record<string, any>;
 }

@@ -200,6 +200,33 @@ async function activate() {
           });
         }
       }
+      const newCloudStorage = {
+        async getItem(key: string) {
+          const res = await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}`);
+          if (res.ok) {
+             const data = await res.json();
+             return data.value;
+          }
+          return undefined;
+        },
+        async setItem(key: string, value: any) {
+           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage`, {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ key, value })
+           });
+        },
+        async removeItem(key: string) {
+           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}`, {
+             method: 'DELETE'
+           });
+        },
+        async clear() {
+           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage`, {
+             method: 'DELETE'
+           });
+        }
+      }
       function open(url: string, target?: string, features?: string) {
         if (!url.startsWith(location.origin) && !url.startsWith('/') && !url.startsWith('.')) {
           return msgbox.confirm(`${extension.name}想打开一个链接：<p>${url}</p>是否允许？`).then(allowed => {
@@ -221,7 +248,8 @@ async function activate() {
           },
           open, 
           localStorage: newLocalStorage, 
-          sessionStorage: newSessionStorage 
+          sessionStorage: newSessionStorage,
+          cloudStorage: newCloudStorage,
         }, document, new Fishpi(apiKey));
       } catch (err) {
         console.error(`激活扩展 ${extension.name} 失败:`, err);

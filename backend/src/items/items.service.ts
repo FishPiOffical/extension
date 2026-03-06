@@ -735,4 +735,68 @@ export class ItemsService {
     item.status = ItemStatus.PENDING;
     return this.itemsRepository.save(item);
   }
+
+  async getStorage(userId: string, itemId: number): Promise<Record<string, any>> {
+    const state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } }
+    });
+    return state?.storage || {};
+  }
+
+  async setStorageItem(userId: string, itemId: number, key: string, value: any): Promise<void> {
+    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
+    if (!item) throw new NotFoundException('找不到此项目');
+
+    let state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } },
+      relations: ['user', 'item']
+    });
+
+    if (!state) {
+      const user = await this.usersService.findById(userId);
+      if (!user) throw new NotFoundException('找不到此用户');
+      
+      state = this.itemStateRepository.create({
+        user,
+        item,
+        storage: {},
+        isEnabled: true,
+        isAutoUpdate: true
+      });
+    }
+
+    if (!state.storage) {
+      state.storage = {};
+    }
+
+    state.storage[key] = value;
+
+    if (JSON.stringify(state.storage).length > 256 * 1024) {
+       throw new BadRequestException('存储数据超过限制 (256KB)');
+    }
+
+    await this.itemStateRepository.save(state);
+  }
+
+  async removeStorageItem(userId: string, itemId: number, key: string): Promise<void> {
+     const state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } }
+    });
+    
+    if (state && state.storage) {
+      delete state.storage[key];
+      await this.itemStateRepository.save(state);
+    }
+  }
+
+  async clearStorage(userId: string, itemId: number): Promise<void> {
+     const state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } }
+    });
+    
+    if (state) {
+      state.storage = {};
+      await this.itemStateRepository.save(state);
+    }
+  }
 }

@@ -7,6 +7,7 @@ export const defaultAllowGlobals = [
   'crypto',
   'console',
   'customElements',
+  'cloudStorage',
   'devicePixelRatio',
   'fullscreen',
   'history',
