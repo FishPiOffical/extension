@@ -109,7 +109,7 @@ export class ItemsController {
   }
 
   @Get(':id/loader.js')
-  async getLoader(@Param('id') id: string, @Res() res) {
+  async getLoader(@Param('id') id: string, @Res() res, @Request() req) {
     const user = await this.usersService.findById(id);
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -126,10 +126,13 @@ export class ItemsController {
       return;
     }
 
+    const origin = req.query.origin;
+
     const items = await this.itemsService.getUserPurchases(user.id);
     const extensionIds = items.filter(p => p.type === 'extension' && p.isEnabled).map(i => i.id);
     const themeIds = items.filter(p => p.type === 'theme' && p.isEnabled).map(i => i.id);
     const extensionData = items.filter(p => p.isEnabled)
+      .filter(p => !origin || p.matchUrls.some((pattern: string) => new RegExp(pattern.replace(/\*/g, '.*')).test(origin)))
       .map(i => ({ 
         id: i.id, 
         name: i.name, 

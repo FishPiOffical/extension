@@ -126,7 +126,11 @@ async function activate() {
   // @ts-ignore
   const scriptSrc = new URL(import.meta.url);
   const newWindow: any = pick(window, defaultAllowGlobals);
-  const { apiKey } = await fetch('/getApiKeyInWeb').then((r) => r.json())
+  let token = '';
+  if (location.host.includes('fishpi.cn')) {
+    const { apiKey } = await fetch('/getApiKeyInWeb').then((r) => r.json())
+    token = apiKey;
+  }
   newWindow.location = {
     ...readOnly(clone(location, window), ['href', 'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash']),
     get href() {
@@ -250,7 +254,7 @@ async function activate() {
           localStorage: newLocalStorage, 
           sessionStorage: newSessionStorage,
           cloudStorage: newCloudStorage,
-        }, document, new Fishpi(apiKey));
+        }, document, new Fishpi(token));
       } catch (err) {
         console.error(`激活扩展 ${extension.name} 失败:`, err);
       }
