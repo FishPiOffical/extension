@@ -149,31 +149,35 @@ export class ItemsController {
   }
 
   @Get(':id/storage/:key')
-  @UseGuards(JwtAuthGuard)
-  async getStorageItem(@Param('id', ParseIntPipe) id: number, @Param('key') key: string, @Request() req) {
-    const storage = await this.itemsService.getStorage(req.user.userId, id);
+  async getStorageItem(@Param('id', ParseIntPipe) id: number, @Param('key') key: string, @Query('userId') userId: string, @Request() req) {
+    const uid = userId || req.user?.userId;
+    if (!uid) throw new ForbiddenException();
+    const storage = await this.itemsService.getStorage(uid, id);
     return { value: storage[key] };
   }
 
   @Post(':id/storage')
-  @UseGuards(JwtAuthGuard)
-  async setStorageItem(@Param('id', ParseIntPipe) id: number, @Body() body: { key: string; value: any }, @Request() req) {
+  async setStorageItem(@Param('id', ParseIntPipe) id: number, @Body() body: { key: string; value: any }, @Query('userId') userId: string, @Request() req) {
+    const uid = userId || req.user?.userId;
+    if (!uid) throw new ForbiddenException();
     if (!body || typeof body.key !== 'string') {
         throw new BadRequestException('Invalid key');
     }
-    return this.itemsService.setStorageItem(req.user.userId, id, body.key, body.value);
+    return this.itemsService.setStorageItem(uid, id, body.key, body.value);
   }
 
   @Delete(':id/storage/:key')
-  @UseGuards(JwtAuthGuard)
-  async removeStorageItem(@Param('id', ParseIntPipe) id: number, @Param('key') key: string, @Request() req) {
-    return this.itemsService.removeStorageItem(req.user.userId, id, key);
+  async removeStorageItem(@Param('id', ParseIntPipe) id: number, @Param('key') key: string, @Query('userId') userId: string, @Request() req) {
+    const uid = userId || req.user?.userId;
+    if (!uid) throw new ForbiddenException();
+    return this.itemsService.removeStorageItem(uid, id, key);
   }
 
   @Delete(':id/storage')
-  @UseGuards(JwtAuthGuard)
-  async clearStorage(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.itemsService.clearStorage(req.user.userId, id);
+  async clearStorage(@Param('id', ParseIntPipe) id: number, @Query('userId') userId: string, @Request() req) {
+    const uid = userId || req.user?.userId;
+    if (!uid) throw new ForbiddenException();
+    return this.itemsService.clearStorage(uid, id);
   }
 
   @Get(':id')

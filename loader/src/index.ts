@@ -206,7 +206,7 @@ async function activate() {
       }
       const newCloudStorage = {
         async getItem(key: string) {
-          const res = await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}`);
+          const res = await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}?userId=${userId}`);
           if (res.ok) {
              const data = await res.json();
              return data.value;
@@ -214,19 +214,19 @@ async function activate() {
           return undefined;
         },
         async setItem(key: string, value: any) {
-           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage`, {
+           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage?userId=${userId}`, {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ key, value })
            });
         },
         async removeItem(key: string) {
-           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}`, {
+           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}?userId=${userId}`, {
              method: 'DELETE'
            });
         },
         async clear() {
-           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage`, {
+           await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage?userId=${userId}`, {
              method: 'DELETE'
            });
         }
