@@ -206,10 +206,10 @@ async function activate() {
       }
       const newCloudStorage = {
         async getItem(key: string) {
-          const res = await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}?userId=${userId}`);
-          if (res.ok) {
-             const data = await res.json();
-             return data.value;
+          const body = await fetch(`${scriptSrc.protocol}//${scriptSrc.host}/api/items/${item}/storage/${key}?userId=${userId}`);
+          if (body.ok) {
+             const res = await body.json();
+             return res.data;
           }
           return undefined;
         },

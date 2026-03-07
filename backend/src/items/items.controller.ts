@@ -153,7 +153,7 @@ export class ItemsController {
     const uid = userId || req.user?.userId;
     if (!uid) throw new ForbiddenException();
     const storage = await this.itemsService.getStorage(uid, id);
-    return { value: storage[key] };
+    return storage[key];
   }
 
   @Post(':id/storage')
