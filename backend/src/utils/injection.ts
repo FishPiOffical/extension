@@ -66,4 +66,6 @@ export const defaultAllowGlobals = [
   'GM_xmlhttpRequest',
   'GM_registerMenuCommand',
   'GM_addStyle',
+  // msgbox export
+  'msgbox',
 ]

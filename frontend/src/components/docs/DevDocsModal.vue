@@ -103,6 +103,13 @@ defineExpose({
           </h4>
           <p class="leading-relaxed text-sm">扩展本身可以依赖于其他已经发布的扩展。 依赖关系会在加载时自动解析并加载，开发者无需担心加载顺序问题。但需要注意避免循环依赖。只需要在发布时，在依赖列表中选择添加依赖的扩展即可。</p>
         </div>
+
+        <div class="bg-base-200/50 rounded-2xl p-6">
+          <h4 class="font-bold text-xl text-base-content mb-3 flex items-center gap-2">
+            <Icon icon="mdi:message-text-outline" class="text-primary w-6 h-6"/> msgbox
+          </h4>
+          <p class="leading-relaxed text-sm">扩展可以使用 <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">msgbox</code> 对象来显示消息框，提供了 <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">alert</code>, <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">confirm</code>, <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">prompt</code> 三个方法，使用方式与浏览器原生的类似，返回值是 Promise，具有更好的用户体验和样式。</p>
+        </div>
       </div>
 
       <div class="modal-action shrink-0 border-t border-base-200 pt-4 mt-0">

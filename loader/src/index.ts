@@ -247,6 +247,7 @@ async function activate() {
         await activate?.({ 
           ...newWindow, 
           ...GM,
+          msgbox,
           GM_registerMenuCommand: (name: string, fn: Function, accessKey?: string) => {
             return GM.GM_registerMenuCommand(name, fn, accessKey, extension.name);
           },
