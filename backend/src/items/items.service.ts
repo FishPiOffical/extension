@@ -341,14 +341,14 @@ export class ItemsService {
         });
 
         if (newState) {
-          newState.isEnabled = wasEnabled;
+          newState.isEnabled = true;
           newState.isAutoUpdate = true;
           await this.itemStateRepository.save(newState);
         } else {
           newState = this.itemStateRepository.create({
             user: user,
             item: item,
-            isEnabled: wasEnabled,
+            isEnabled: true,
             isAutoUpdate: true
           });
           await this.itemStateRepository.save(newState);
@@ -547,9 +547,8 @@ export class ItemsService {
                  isEnabled: false
                }));
             }
-          } else if (otherState.isEnabled) {
-            otherState.isEnabled = false;
-            await this.itemStateRepository.save(otherState);
+          } else {
+            await this.itemStateRepository.remove(otherState);
           }
         }
       }
