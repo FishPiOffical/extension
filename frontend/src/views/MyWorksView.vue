@@ -133,7 +133,7 @@ const handlePublish = async (id: number) => {
 }
 
 const isUsing = (id: number) => {
-  return myPurchases.value.some(p => p.id === id)
+  return myPurchases.value.find(p => p.id === id)?.isEnabled
 }
 
 const handleToggleUse = async (item: Item) => {

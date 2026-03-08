@@ -570,6 +570,12 @@ export class ItemsService {
       state.isEnabled = isEnabled;
     }
 
+    if (!isEnabled && item.status === ItemStatus.DRAFT) {
+      // 如果是草稿被关闭了，则移除状态记录，恢复默认开启（购买了但没有显式设置状态的用户默认是开启的）
+      await this.itemStateRepository.remove(state);
+      return { isEnabled: false, isAutoUpdate: true };
+    }
+
     // 如果启用了特定版本，检查是否为最新版本
     if (isEnabled) {
       const allVersions = await this.itemsRepository.find({
@@ -665,6 +671,11 @@ export class ItemsService {
     if (item.status !== ItemStatus.DRAFT) {
       throw new BadRequestException('只有草稿可以删除');
     }
+    // 检查是否有 state 依赖这个项目，如果有则一并删除
+    const states = await this.itemStateRepository.find({
+      where: { item: { id } }
+    });
+    await this.itemStateRepository.remove(states);
     await this.itemsRepository.remove(item);
   }
 
