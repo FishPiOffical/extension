@@ -340,15 +340,11 @@ export class ItemsService {
           where: { user: { id: user.id }, item: { id: item.id } }
         });
 
-        if (newState) {
-          newState.isEnabled = true;
-          newState.isAutoUpdate = true;
-          await this.itemStateRepository.save(newState);
-        } else {
+        if (!newState && !wasEnabled) {
           newState = this.itemStateRepository.create({
             user: user,
             item: item,
-            isEnabled: true,
+            isEnabled: wasEnabled,
             isAutoUpdate: true
           });
           await this.itemStateRepository.save(newState);
