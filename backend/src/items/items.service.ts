@@ -521,6 +521,33 @@ export class ItemsService {
     return savedItem;
   }
 
+  async removePurchase(itemId: number, userId: string): Promise<void> {
+    const item = await this.itemsRepository.findOne({
+      where: { id: itemId },
+      relations: ['purchasedBy'],
+    });
+
+    if (!item) {
+      throw new NotFoundException('没找到');
+    }
+
+    const hasPurchased = item.purchasedBy?.some(u => u.id === userId);
+    if (hasPurchased) {
+      await this.itemsRepository.createQueryBuilder()
+        .relation(Item, 'purchasedBy')
+        .of(item.id)
+        .remove(userId);
+    }
+
+    // 同时删除当前项目的用户状态
+    const state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } }
+    });
+    if (state) {
+      await this.itemStateRepository.remove(state);
+    }
+  }
+
   async getUserPurchases(userId: string) {
     const items = await this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')

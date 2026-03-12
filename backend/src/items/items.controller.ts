@@ -252,6 +252,12 @@ export class ItemsController {
     return this.itemsService.purchase(id, req.user.userId);
   }
 
+  @Delete(':id/purchase')
+  @UseGuards(JwtAuthGuard)
+  async removePurchase(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.itemsService.removePurchase(id, req.user.userId);
+  }
+
   @Post(':id/toggle')
   @UseGuards(JwtAuthGuard)
   async toggleState(

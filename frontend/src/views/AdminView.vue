@@ -94,9 +94,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto py-12 px-4 pb-32">
+  <div class="mx-auto py-12 px-4 pb-32">
     <div class="flex flex-col md:flex-row justify-between items-end mb-16 px-4 gap-6">
-      <div class="max-w-xl">
+      <div class="w-full">
         <h1 class="text-4xl font-black tracking-tighter text-base-content uppercase leading-none mb-4">管理控制台</h1>
         <div class="flex gap-2 mb-4">
           <button @click="activeTab = 'items'" 

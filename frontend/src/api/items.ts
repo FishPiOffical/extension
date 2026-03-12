@@ -150,6 +150,13 @@ export function purchaseItem(id: number) {
 }
 
 /**
+ * Remove purchased item
+ */
+export function removePurchaseItem(id: number) {
+  return request.delete(`/items/${id}/purchase`)
+}
+
+/**
  * Toggle item enabled state
  */
 export function toggleItemState(id: number, isEnabled: boolean) {

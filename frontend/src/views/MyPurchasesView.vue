@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPurchasedItems, toggleItemState, getItems, purchaseItem, setAutoUpdate } from '@/api/items'
+import { getPurchasedItems, toggleItemState, getItems, purchaseItem, setAutoUpdate, removePurchaseItem } from '@/api/items'
 import message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
@@ -59,9 +59,6 @@ const handleUpgrade = async (item: any, latest: any) => {
 }
 
 const toggleAutoUpdate = async (item: any) => {
-  // Toggle locally first or wait? Let's wait.
-  // Actually usually toggles are optimistic or wait. 
-  // Given the backend logic (switching versions might affect it), let's wait.
   const newState = !item.isAutoUpdate
   try {
     const res = await setAutoUpdate(item.id, newState)
@@ -92,6 +89,31 @@ const toggleEnabled = async (item: any) => {
     }
   } catch (error) {
     console.error('Failed to toggle state:', error)
+  }
+}
+
+const handleRemove = async (item: any) => {
+  let warningMsg = `确定要从账号中移除 <b class="text-error">${item.name}</b> 吗？<br><br>移除后您将无法继续使用此${item.type === 'extension' ? '扩展' : '主题'}以及获得相关更新。`
+  if (item.price && item.price > 0) {
+    warningMsg += `<br><br><span class="text-error font-bold">警告：此为付费项目，移除后购买费用（ ${item.price} 积分 ）将不会退回！重新获取将需再次付费！</span>`
+  }
+
+  const confirmed = await MessageBox.confirm(warningMsg, '移除确认', {
+    confirmButtonText: '确定移除',
+    cancelButtonText: '取消',
+    type: 'error',
+    dangerouslyUseHTMLString: true
+  } as any)
+  
+  if (!confirmed) return
+
+  try {
+    await removePurchaseItem(item.id)
+    message.success('移除成功')
+    await loadPurchasedItems()
+  } catch (error: any) {
+    console.error('Remove failed:', error)
+    message.error(error.response?.data?.msg || '移除失败')
   }
 }
 
@@ -183,8 +205,17 @@ onMounted(() => {
                 有更新
               </div>
             </div>
-            <span class="text-[10px] font-black uppercase tracking-widest" :class="item.isEnabled ? 'text-success' : 'text-base-content/30 italic'">
-              {{ item.isEnabled ? '已启用' : '已禁用' }}
+            <span class="group">
+              <!-- Remove Purchase Button -->
+              <div @click.stop class="tooltip tooltip-left group-hover:inline hidden" data-tip="移除当前项目">
+                <button @click="handleRemove(item)" class="btn btn-ghost btn-xs btn-circle text-error/50 hover:text-error hover:bg-error/10">
+                  <Icon icon="mdi:trash-can-outline" />
+                </button>
+              </div>
+
+              <span class="text-[10px] font-black uppercase tracking-widest" :class="item.isEnabled ? 'text-success' : 'text-base-content/30 italic'">
+                {{ item.isEnabled ? '已启用' : '已禁用' }}
+              </span>
             </span>
           </div>
         </div>

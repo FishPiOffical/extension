@@ -186,22 +186,26 @@ onMounted(() => {
   <div class="p-4 space-y-6">
     <!-- Header -->
     <header class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-base-100 p-6 rounded-2xl border border-base-200">
-      <div class="flex items-center gap-4">
+      <div class="flex md:items-center gap-4">
         <div class="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center text-primary shrink-0">
           <Icon icon="mdi:package-variant" class="h-6 w-6" />
         </div>
         <div>
-          <h1 class="text-2xl font-bold tracking-tight flex items-center gap-3">
-            我的作品
-            <span class="badge badge-primary badge-soft font-bold rounded-lg">{{ groupedWorks.length }}</span>
-            <router-link v-if="authStore.user" :to="`/user/${authStore.user.username}`" class="btn btn-xs btn-ghost gap-1 opacity-50 hover:opacity-100">
-              <Icon icon="mdi:account-circle-outline" />
-              查看公共主页
-            </router-link>
-            <button @click="devDocsRef?.open()" class="btn btn-xs btn-ghost gap-1 text-primary hover:bg-primary/10">
-              <Icon icon="mdi:book-open-page-variant" />
-              开发指南
-            </button>
+          <h1 class="text-2xl font-bold tracking-tight flex md:items-center md:gap-3 md:flex-row flex-col">
+            <span class="w-full md:w-auto">
+              <span>我的作品</span>
+              <span class="badge badge-primary badge-soft font-bold rounded-lg">{{ groupedWorks.length }}</span>
+            </span>
+            <span class="w-full md:w-auto space-x-2">
+              <router-link v-if="authStore.user" :to="`/user/${authStore.user.username}`" class="text-xs gap-1 opacity-50 hover:opacity-100">
+                <Icon icon="mdi:account-circle-outline" />
+                查看公共主页
+              </router-link>
+              <button @click="devDocsRef?.open()" class="text-xs gap-1 text-primary hover:bg-primary/10">
+                <Icon icon="mdi:book-open-page-variant" />
+                开发指南
+              </button>
+            </span>
           </h1>
           <p class="text-xs text-base-content/50 mt-0.5 whitespace-nowrap">管理您创建的所有作品及其版本</p>
         </div>

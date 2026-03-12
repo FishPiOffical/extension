@@ -7,7 +7,7 @@
         <button class="btn btn-ghost btn-circle btn-sm" @click="handleClose">✕</button>
       </div>
       <div class="py-4">
-        <div v-if="isString && message" class="whitespace-pre-wrap mb-4">{{ message }}</div>
+        <div v-if="isString && message" class="whitespace-pre-wrap mb-4" v-html="message"></div>
         <div v-if="!isString">
           <slot />
         </div>
