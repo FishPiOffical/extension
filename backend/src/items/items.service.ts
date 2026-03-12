@@ -289,11 +289,21 @@ export class ItemsService {
   async review(id: number, status: ItemStatus, comment?: string): Promise<Item> {
     const item = await this.itemsRepository.findOne({
       where: { id },
-      relations: ['upgradeFrom', 'author'],
+      relations: ['upgradeFrom', 'author', 'purchasedBy'],
     });
 
     if (!item) {
       throw new NotFoundException('没找到');
+    }
+
+    // 审核前清空因测试而挂载的用户
+    if (item.purchasedBy && item.purchasedBy.length > 0) {
+      const userIds = item.purchasedBy.map(u => u.id);
+      await this.itemsRepository.createQueryBuilder()
+        .relation(Item, 'purchasedBy')
+        .of(item.id)
+        .remove(userIds);
+      item.purchasedBy = [];
     }
 
     item.status = status;
@@ -386,6 +396,46 @@ export class ItemsService {
     }
 
     return savedItem;
+  }
+
+  async addTestItem(itemId: number, userId: string): Promise<Item> {
+    const item = await this.itemsRepository.findOne({
+      where: { id: itemId },
+      relations: ['author', 'purchasedBy', 'dependencies'],
+    });
+    if (!item) {
+      throw new NotFoundException('没找到');
+    }
+    const user = await this.usersService.findById(userId);
+
+    if (item.status !== ItemStatus.PENDING) {
+      throw new BadRequestException('只能挂载待审核的项目');
+    }
+
+    // Check if already in purchasedBy
+    const alreadyPurchased = item.purchasedBy?.some(u => u.id === userId);
+    if (!alreadyPurchased) {
+      if (!item.purchasedBy) {
+        item.purchasedBy = [];
+      }
+      item.purchasedBy.push(user);
+      await this.itemsRepository.save(item);
+    }
+
+    // 自动获得免费的依赖项
+    if (item.dependencies && item.dependencies.length > 0) {
+      for (const dep of item.dependencies) {
+        if (dep.price === 0) {
+          try {
+            await this.purchase(dep.id, userId);
+          } catch (e) {
+            // Already owned or other error, ignore
+          }
+        }
+      }
+    }
+    
+    return item;
   }
 
   async purchase(itemId: number, userId: string): Promise<Item> {

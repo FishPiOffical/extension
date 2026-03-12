@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed } from 'vue'
-import { getPendingItems, reviewItem, getReportedComments, blockComment, ignoreReport, type Comment } from '@/api/items'
+import { getPendingItems, reviewItem, addTestItem, getReportedComments, blockComment, ignoreReport, type Comment } from '@/api/items'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import Message from '@/components/msg'
@@ -75,6 +75,16 @@ const review = async (itemId: number, status: 'approved' | 'rejected') => {
   } catch (error: any) {
     console.error('Review failed:', error)
     Message.error(error.response?.data?.msg || error.message || '审核失败')
+  }
+}
+
+const addToTest = async (itemId: number) => {
+  try {
+    await addTestItem(itemId)
+    Message.success('已添加到账号，可前往鱼排测试该插件/主题')
+  } catch (error: any) {
+    console.error('Add test failed:', error)
+    Message.error(error.response?.data?.msg || error.message || '添加测试失败')
   }
 }
 
@@ -247,6 +257,9 @@ onMounted(() => {
                  <div class="flex gap-3">
                    <button @click="review(selectedItem.id, 'approved')" class="btn btn-success flex-1 rounded-2xl font-black uppercase tracking-widest  shadow-lg shadow-success/20">通过</button>
                    <button @click="review(selectedItem.id, 'rejected')" class="btn btn-error btn-outline border-2 flex-1 rounded-2xl font-black uppercase tracking-widest">拒绝申请</button>
+                 </div>
+                 <div>
+                    <button @click="addToTest(selectedItem.id)" class="btn btn-info btn-outline w-full rounded-2xl font-black uppercase tracking-widest border-2">添加到账号测试</button>
                  </div>
                </section>
             </div>

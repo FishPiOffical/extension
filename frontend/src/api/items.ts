@@ -136,6 +136,13 @@ export function reviewItem(id: number, data: ReviewItemData) {
 }
 
 /**
+ * Add item to admin account for testing (admin only)
+ */
+export function addTestItem(id: number) {
+  return request.post<Item>(`/items/${id}/add-test`)
+}
+
+/**
  * Purchase item
  */
 export function purchaseItem(id: number) {

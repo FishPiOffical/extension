@@ -339,4 +339,13 @@ export class ItemsController {
   async ignoreReport(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.itemsService.ignoreReport(id, req.user.userId);
   }
+
+  @Post(':id/add-test')
+  @UseGuards(JwtAuthGuard)
+  async addTestItem(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Admin access required');
+    }
+    return this.itemsService.addTestItem(id, req.user.userId);
+  }
 }
