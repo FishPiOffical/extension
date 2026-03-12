@@ -12,6 +12,8 @@ export interface ConfigData {
   port: number
   jwtSecret: string
   goldenKey: string
+  noticeGoldenKey: string
+  noticeUsers: string
 }
 
 export interface ConfigStatus {
@@ -24,10 +26,6 @@ export function getConfigStatus() {
 
 export function setupConfig(config: ConfigData) {
   return request.post<{ message: string }>('/config', config)
-}
-
-export function getConfig() {
-  return request.get<ConfigData>('/config')
 }
 
 export function updateConfig(config: Partial<ConfigData>) {

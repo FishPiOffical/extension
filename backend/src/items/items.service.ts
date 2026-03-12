@@ -4,9 +4,9 @@ import { MoreThan, IsNull, Repository } from 'typeorm';
 import { Item, ItemStatus } from './item.entity';
 import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
-import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
-import Fishpi from 'fishpi';
+import Fishpi, { FingerTo } from 'fishpi';
+import { ConfigService } from 'src/config/config.service';
 
 @Injectable()
 export class ItemsService {
@@ -365,6 +365,24 @@ export class ItemsService {
           console.error(`Failed to transfer ownership for user ${user.id}`, e);
         }
       }
+    }
+
+    if (ConfigService.getConfig()?.noticeGoldenKey) {
+      const statusResult = {
+        [ItemStatus.APPROVED]: '通过审核',
+        [ItemStatus.REJECTED]: '未通过审核',
+        [ItemStatus.PENDING]: '待审核',
+        [ItemStatus.DRAFT]: '草稿',
+      }[status] || '未知状态';
+      FingerTo(ConfigService.getConfig()?.noticeGoldenKey)
+        .sendNotice(
+          item.author.username, 
+          `您的${item.type === 'extension' ? '扩展' : '主题'}《[${
+            item.name
+          }](https://ext.adventext.fun/item/${item.id})》${
+            statusResult
+          }${comment ? `，评审意见：${comment}` : ''}`
+        );
     }
 
     return savedItem;
@@ -739,6 +757,19 @@ export class ItemsService {
     }
 
     item.status = ItemStatus.PENDING;
+
+    const config = ConfigService.getConfig();
+    if (config?.noticeGoldenKey && config?.noticeUsers) {
+      const noticeFinger = FingerTo(config.noticeGoldenKey);
+      config.noticeUsers.split(',').forEach(username => {
+        noticeFinger.sendNotice(
+          username.trim(), 
+          `用户${item.author.username}发布了新的${
+            item.type === 'extension' ? '扩展' : '主题'
+          }《${item.name}》待[审核](https://ext.adventext.fun/admin)`
+        );
+       });
+    }
     return this.itemsRepository.save(item);
   }
 

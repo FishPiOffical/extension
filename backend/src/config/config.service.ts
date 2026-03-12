@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { existsSync, writeFileSync } from 'fs';
 import { configPath } from '../utils/config';
+import { ConfigData } from './config.dto';
 
 @Injectable()
 export class ConfigService {
@@ -10,7 +11,7 @@ export class ConfigService {
     return existsSync(this.configPath);
   }
 
-  saveConfig(config: any): void {
+  saveConfig(config: ConfigData): void {
     writeFileSync(ConfigService.configPath, JSON.stringify(config, null, 2));
     // 等待 2 秒后重启应用以应用新配置
     setTimeout(() => {
@@ -19,9 +20,9 @@ export class ConfigService {
     }, 2000);
   }
 
-  static getConfig(): any {
+  static getConfig(): ConfigData | null {
     if (ConfigService.isConfigured()) {
-      return require(ConfigService.configPath);
+      return require(ConfigService.configPath) as ConfigData;
     }
     return null;
   }

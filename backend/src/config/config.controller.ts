@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Get, Put } from '@nestjs/common';
 import { ConfigService } from './config.service';
+import { ConfigData } from './config.dto';
 
 @Controller('config')
 export class ConfigController {
@@ -11,7 +12,7 @@ export class ConfigController {
   }
 
   @Post()
-  async setupConfig(@Body() body: { db: any; port?: number; jwtSecret?: string; goldenKey?: string }) {
+  async setupConfig(@Body() body: ConfigData) {
     if (ConfigService.isConfigured()) {
       return { message: 'Already configured' };
     }
@@ -20,7 +21,7 @@ export class ConfigController {
   }
 
   @Put()
-  async updateConfig(@Body() body: { db?: any; port?: number; jwtSecret?: string; goldenKey?: string }) {
+  async updateConfig(@Body() body: Partial<ConfigData>) {
     if (!ConfigService.isConfigured()) {
       return { message: 'Not configured yet' };
     }
@@ -40,11 +41,4 @@ export class ConfigedController {
     return { configured: ConfigService.isConfigured() };
   }
 
-  @Get()
-  async getConfig() {
-    if (!ConfigService.isConfigured()) {
-      return { message: 'Not configured' };
-    }
-    return ConfigService.getConfig();
-  }
 }

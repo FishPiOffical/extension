@@ -134,6 +134,44 @@
               required
             />
           </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">积分金手指</span>
+            </label>
+            <input
+              v-model="config.goldenKey"
+              type="text"
+              placeholder="请输入积分金手指"
+              class="input input-bordered w-full"
+              required
+            />
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">通知金手指</span>
+            </label>
+            <input
+              v-model="config.noticeGoldenKey"
+              type="text"
+              placeholder="请输入通知金手指"
+              class="input input-bordered w-full"
+              required
+            />
+          </div>
+
+          <div class="form-control w-full">
+            <label class="label px-1">
+              <span class="text-xs font-bold opacity-60 uppercase">通知用户列表</span>
+            </label>
+            <input
+              v-model="config.noticeUsers"
+              type="text"
+              placeholder="请输入通知用户列表，逗号分隔"
+              class="input input-bordered w-full"
+            />
+          </div>
         </div>
 
         <!-- 错误信息 -->
@@ -177,7 +215,9 @@ const config = ref<ConfigData>({
   },
   port: 7900,
   jwtSecret: 'fishpi-secret-key-change-in-production',
-  goldenKey: ''
+  goldenKey: '',
+  noticeGoldenKey: '',
+  noticeUsers: '',
 })
 
 const loading = ref(false)
