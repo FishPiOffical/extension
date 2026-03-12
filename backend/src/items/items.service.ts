@@ -71,6 +71,7 @@ export class ItemsService {
       dependencies,
       status: isDraft ? ItemStatus.DRAFT : ItemStatus.PENDING,
     });
+    this.sendPublishNotice(item);
     return this.itemsRepository.save(item);
   }
 
@@ -835,6 +836,12 @@ export class ItemsService {
 
     item.status = ItemStatus.PENDING;
 
+    this.sendPublishNotice(item);
+
+    return this.itemsRepository.save(item);
+  }
+
+  private sendPublishNotice(item: Item) {
     const config = ConfigService.getConfig();
     if (config?.noticeGoldenKey && config?.noticeUsers) {
       const noticeFinger = FingerTo(config.noticeGoldenKey);
@@ -843,11 +850,10 @@ export class ItemsService {
           username.trim(), 
           `用户${item.author.username}发布了新的${
             item.type === 'extension' ? '扩展' : '主题'
-          }《${item.name}》待[审核](https://ext.adventext.fun/admin)`
+          }《${item.name}》[待审核](https://ext.adventext.fun/admin)`
         );
        });
     }
-    return this.itemsRepository.save(item);
   }
 
   async getStorage(userId: string, itemId: number): Promise<Record<string, any>> {
