@@ -95,6 +95,8 @@ defineExpose({
           </h4>
           <p class="leading-relaxed text-sm mb-2">扩展可以使用 <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">cloudStorage</code> 对象来存储和读取数据，数据会保存在云端，并且与用户账号绑定。</p>
           <p class="leading-relaxed text-sm">接口与 <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">localStorage</code> 一样，但需注意接口皆是异步的（调用需 await 等待结果返回）。<br/><strong class="text-warning bg-warning/10 px-2 py-1 mt-2 inline-block rounded">不建议并发调用操作，可能导致数据丢失。</strong></p>
+
+          <p class="leading-relaxed text-sm mt-4">若需要在多个扩展之间共享数据，可以使用 <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">globalStorage</code> 对象，接口同样与 <code class="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded text-sm">localStorage</code> 一样，但数据不与用户账号绑定，而是与扩展标识符（<strong>需自行设置</strong>）绑定。<br/><strong class="text-warning bg-warning/10 px-2 py-1 mt-2 inline-block rounded">同样不建议并发调用操作，可能导致数据丢失。</strong></p>
         </div>
 
         <div class="bg-base-200/50 rounded-2xl p-6">
