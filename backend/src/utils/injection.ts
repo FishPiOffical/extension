@@ -8,6 +8,7 @@ export const defaultAllowGlobals = [
   'console',
   'customElements',
   'cloudStorage',
+  'globalStorage',
   'devicePixelRatio',
   'fullscreen',
   'history',
@@ -66,9 +67,6 @@ export const defaultAllowGlobals = [
   'GM_xmlhttpRequest',
   'GM_registerMenuCommand',
   'GM_addStyle',
-  // storage export
-  'cloudStorage',
-  'globalStorage',
   // msgbox export
   'msgbox',
 ]
