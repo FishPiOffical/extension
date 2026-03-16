@@ -49,6 +49,9 @@ export class Item {
   @ManyToOne(() => User, user => user.items)
   author: User;
 
+  @Column({ nullable: true, comment: '项目标识符', length: 100 })
+  identifier: string;
+
   @Column({ nullable: true })
   upgradeFromId: number;
 

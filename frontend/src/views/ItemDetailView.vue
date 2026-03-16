@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getItemById, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, setAutoUpdate, type Item, getComments, addComment, blockComment, type Comment, reportComment } from '@/api/items'
+import { getItemById, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, setAutoUpdate, type Item, getComments, addComment, blockComment, type Comment, reportComment, updateIdentifier } from '@/api/items'
 import { useAuthStore } from '@/stores/auth'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
@@ -235,6 +235,37 @@ const handleUseAuthorItem = async () => {
   }
 }
 
+const isEditingIdentifier = ref(false)
+const newIdentifier = ref('')
+const savingIdentifier = ref(false)
+
+const startEditIdentifier = () => {
+  newIdentifier.value = item.value?.identifier || ''
+  isEditingIdentifier.value = true
+}
+
+const saveIdentifier = async () => {
+  if (!item.value) return
+  if (newIdentifier.value.length < 3) {
+    message.error('标识符长度至少为3位')
+    return
+  }
+  
+  if (!await MessageBox.confirm('标识符一旦设定将不可修改，确定要保存吗？', '确认操作')) return
+
+  savingIdentifier.value = true
+  try {
+    await updateIdentifier(item.value.id, newIdentifier.value)
+    message.success('标识符已更新')
+    item.value.identifier = newIdentifier.value
+    isEditingIdentifier.value = false
+  } catch (error: any) {
+    message.error(error.response?.data?.message || '更新标识符失败')
+  } finally {
+    savingIdentifier.value = false
+  }
+}
+
 onMounted(() => {
   loadItem()
 })
@@ -305,6 +336,37 @@ onMounted(() => {
                            class="badge badge-sm badge-primary badge-outline hover:bg-primary hover:text-primary-content transition-all font-bold">
                 {{ dep.name }} (v{{ dep.version }})
               </router-link>
+            </div>
+
+            <!-- Identifier Section -->
+            <div class="flex items-center gap-2 py-1">
+              <span class="text-xs font-black uppercase tracking-widest opacity-40">作品标识:</span>
+              <div v-if="!isEditingIdentifier" class="flex items-center gap-2">
+                <span v-if="item.identifier" class="font-mono text-sm opacity-60">{{ item.identifier }}</span>
+                <span v-else class="text-xs opacity-30 italic">未设置</span>
+                <button v-if="isAuthor && !item.identifier" @click="startEditIdentifier" class="btn btn-ghost btn-xs text-primary low-case">
+                  <Icon icon="mdi:pencil" class="w-3 h-3" />
+                  设置
+                </button>
+              </div>
+              <div v-else class="flex items-center gap-2">
+                <input v-model="newIdentifier" 
+                       type="text" 
+                       placeholder="最小3位，设置后不可修改" 
+                       class="input input-bordered input-xs w-48 font-mono"
+                       :disabled="savingIdentifier" />
+                <button @click="saveIdentifier" 
+                        class="btn btn-primary btn-xs" 
+                        :disabled="savingIdentifier || newIdentifier.length < 3">
+                  <span v-if="savingIdentifier" class="loading loading-spinner loading-xs"></span>
+                  保存
+                </button>
+                <button @click="isEditingIdentifier = false" 
+                        class="btn btn-ghost btn-xs" 
+                        :disabled="savingIdentifier">
+                  取消
+                </button>
+              </div>
             </div>
             
             <div class="flex flex-wrap items-center gap-6 pt-2">

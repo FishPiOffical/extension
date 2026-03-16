@@ -54,6 +54,8 @@ export class ItemsService {
 
       version = originalItem.version + 1;
       upgradeFrom = originalItem;
+      // Use the identifier from the original item, ignore any new identifier provided during upgrade
+      data.identifier = originalItem.identifier;
     }
 
     let dependencies = [];
@@ -611,7 +613,7 @@ export class ItemsService {
 
     // 如果当前要开启，则关闭该项目（同作者、同名、同类型）的其他版本
     if (isEnabled) {
-      const allVersions = await this.itemsRepository.find({
+      const allVersionsOfProject = await this.itemsRepository.find({
         where: {
           name: item.name,
           author: { id: item.author.id },
@@ -619,7 +621,9 @@ export class ItemsService {
         }
       });
       
-      for (const v of allVersions) {
+      let storageToMigrate = null;
+
+      for (const v of allVersionsOfProject) {
         if (v.id !== itemId) {
           let otherState = await this.itemStateRepository.findOne({
             where: { user: { id: userId }, item: { id: v.id } }
@@ -640,36 +644,35 @@ export class ItemsService {
                }));
             }
           } else {
+            // Found a state from another version, keep its storage for migration
+            if (otherState.storage && Object.keys(otherState.storage).length > 0) {
+              storageToMigrate = otherState.storage;
+            }
             await this.itemStateRepository.remove(otherState);
           }
         }
       }
-    }
 
-    let state = await this.itemStateRepository.findOne({
-      where: { user: { id: userId }, item: { id: itemId } }
-    });
-
-    if (!state) {
-      state = this.itemStateRepository.create({
-        user,
-        item,
-        isEnabled,
-        isAutoUpdate: true
+      let state = await this.itemStateRepository.findOne({
+        where: { user: { id: userId }, item: { id: itemId } }
       });
-    } else {
-      state.isEnabled = isEnabled;
-    }
 
-    if (!isEnabled && item.status === ItemStatus.DRAFT) {
-      // 如果是草稿被关闭了，则移除状态记录，恢复默认开启（购买了但没有显式设置状态的用户默认是开启的）
-      await this.itemStateRepository.remove(state);
-      return { isEnabled: false, isAutoUpdate: true };
-    }
+      if (!state) {
+        state = this.itemStateRepository.create({
+          user,
+          item,
+          isEnabled,
+          isAutoUpdate: true,
+          storage: storageToMigrate || {}
+        });
+      } else {
+        state.isEnabled = isEnabled;
+        if (storageToMigrate) {
+          state.storage = { ...storageToMigrate, ...(state.storage || {}) };
+        }
+      }
 
-    // 如果启用了特定版本，检查是否为最新版本
-    if (isEnabled) {
-      const allVersions = await this.itemsRepository.find({
+      const allVersionsSorted = await this.itemsRepository.find({
         where: {
           name: item.name,
           author: { id: item.author.id },
@@ -679,8 +682,8 @@ export class ItemsService {
         take: 1
       });
 
-      if (allVersions.length > 0) {
-        const latestVersion = allVersions[0];
+      if (allVersionsSorted.length > 0) {
+        const latestVersion = allVersionsSorted[0];
         // 如果启用的版本不是最新版本，则关闭自动更新
         if (item.version < latestVersion.version) {
           state.isAutoUpdate = false;
@@ -689,10 +692,34 @@ export class ItemsService {
           state.isAutoUpdate = true;
         }
       }
-    }
 
-    await this.itemStateRepository.save(state);
-    return { isEnabled: state.isEnabled, isAutoUpdate: state.isAutoUpdate };
+      await this.itemStateRepository.save(state);
+      return { isEnabled: state.isEnabled, isAutoUpdate: state.isAutoUpdate };
+    } else {
+      let state = await this.itemStateRepository.findOne({
+        where: { user: { id: userId }, item: { id: itemId } }
+      });
+
+      if (!state) {
+        state = this.itemStateRepository.create({
+          user,
+          item,
+          isEnabled: false,
+          isAutoUpdate: true
+        });
+      } else {
+        state.isEnabled = false;
+      }
+
+      if (item.status === ItemStatus.DRAFT) {
+        // 如果是草稿被关闭了，则移除状态记录，恢复默认开启（购买了但没有显式设置状态的用户默认是开启的）
+        await this.itemStateRepository.remove(state);
+        return { isEnabled: false, isAutoUpdate: true };
+      }
+      
+      await this.itemStateRepository.save(state);
+      return { isEnabled: false, isAutoUpdate: state.isAutoUpdate };
+    }
   }
 
   async setAutoUpdate(itemId: number, userId: string, isAutoUpdate: boolean): Promise<any> {
@@ -816,8 +843,71 @@ export class ItemsService {
       }
     }
 
+    // If item already has an identifier, don't allow changing it
+    if (item.identifier && data.identifier && item.identifier !== data.identifier) {
+      throw new BadRequestException('一旦设定，标识符不可修改');
+    }
+
     Object.assign(item, data);
     return this.itemsRepository.save(item);
+  }
+
+  async updateIdentifier(id: number, identifier: string, userId: string): Promise<Item> {
+    const item = await this.itemsRepository.findOne({
+      where: { id },
+      relations: ['author'],
+    });
+
+    if (!item) {
+      throw new NotFoundException('找不到此作品');
+    }
+
+    if (item.author.id !== userId) {
+      throw new UnauthorizedException('无权修改此作品');
+    }
+
+    if (item.identifier) {
+      throw new BadRequestException('一旦设定，标识符不可修改');
+    }
+
+    if (!identifier || identifier.length < 3) {
+      throw new BadRequestException('标识符长度至少为3位');
+    }
+
+    // Apply to ALL versions of this project
+    // Find absolute root
+    let rootItem = item;
+    while (rootItem.upgradeFromId) {
+      const parent = await this.itemsRepository.findOne({ where: { id: rootItem.upgradeFromId } });
+      if (!parent) break;
+      rootItem = parent;
+    }
+
+    // Update all items in this chain
+    const itemsToUpdate = [];
+    const chainIds = new Set<number>();
+    const collectChain = async (currentItem: Item) => {
+      currentItem.identifier = identifier;
+      itemsToUpdate.push(currentItem);
+      chainIds.add(currentItem.id);
+      const children = await this.itemsRepository.find({ where: { upgradeFromId: currentItem.id } });
+      for (const child of children) {
+        await collectChain(child);
+      }
+    };
+    await collectChain(rootItem);
+
+    // Check if identifier is already used by another project
+    // If identifier is found, it must belong to one of our chainIds
+    const existing = await this.itemsRepository.findOne({
+      where: { identifier }
+    });
+    if (existing && !chainIds.has(existing.id)) {
+      throw new BadRequestException('该标识符已被其他作品占用');
+    }
+
+    await this.itemsRepository.save(itemsToUpdate);
+    return item;
   }
 
   async publishDraft(id: number, userId: string): Promise<Item> {
@@ -842,6 +932,7 @@ export class ItemsService {
   }
 
   private sendPublishNotice(item: Item) {
+    if (item.status !== ItemStatus.PENDING) return;
     const config = ConfigService.getConfig();
     if (config?.noticeGoldenKey && config?.noticeUsers) {
       const noticeFinger = FingerTo(config.noticeGoldenKey);

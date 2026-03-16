@@ -201,13 +201,14 @@ export class ItemsController {
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   async createItem(
-    @Body() body: { name: string; description: string; price: string; type: ItemType; code: string; language: string; matchUrls?: string[]; upgradeFromId?: number; isDraft?: boolean; dependencyIds?: number[] },
+    @Body() body: { name: string; description: string; identifier?: string; price: string; type: ItemType; code: string; language: string; matchUrls?: string[]; upgradeFromId?: number; isDraft?: boolean; dependencyIds?: number[] },
     @Request() req,
   ) {
     return this.itemsService.create(
       {
         name: body.name,
         description: body.description,
+        identifier: body.identifier,
         type: body.type,
         code: body.code,
         language: body.language,
@@ -246,6 +247,16 @@ export class ItemsController {
     return this.itemsService.review(id, body.status, body.comment);
   }
 
+  @Post(':id/identifier')
+  @UseGuards(JwtAuthGuard)
+  async updateIdentifier(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { identifier: string },
+    @Request() req,
+  ) {
+    return this.itemsService.updateIdentifier(id, body.identifier, req.user.userId);
+  }
+
   @Post(':id/purchase')
   @UseGuards(JwtAuthGuard)
   async purchase(@Param('id', ParseIntPipe) id: number, @Request() req) {
@@ -282,7 +293,7 @@ export class ItemsController {
   @UseGuards(JwtAuthGuard)
   async updateDraft(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { name?: string; description?: string; price?: string; type?: ItemType; code?: string; language?: string; matchUrls?: string[]; dependencyIds?: number[] },
+    @Body() body: { name?: string; description?: string; identifier?: string; price?: string; type?: ItemType; code?: string; language?: string; matchUrls?: string[]; dependencyIds?: number[] },
     @Request() req,
   ) {
     return this.itemsService.updateDraft(
@@ -290,6 +301,7 @@ export class ItemsController {
       {
         name: body.name,
         description: body.description,
+        identifier: body.identifier,
         type: body.type,
         code: body.code,
         language: body.language,

@@ -10,6 +10,7 @@ export interface Item {
   status: 'draft' | 'pending' | 'approved' | 'rejected'
   price: number
   version?: number
+  identifier?: string
   createdAt: string
   reviewComment?: string
   author: {
@@ -46,6 +47,7 @@ export interface Comment {
 export interface UploadItemData {
   name: string
   description: string
+  identifier?: string
   price: number
   type: 'extension' | 'theme'
   code: string
@@ -196,6 +198,13 @@ export function getMyDrafts() {
  */
 export function updateDraft(id: number, data: Partial<UploadItemData>) {
   return request.post<Item>(`/items/draft/${id}/update`, data)
+}
+
+/**
+ * Update project identifier (Author only)
+ */
+export function updateIdentifier(id: number, identifier: string) {
+  return request.post<Item>(`/items/${id}/identifier`, { identifier })
 }
 
 /**

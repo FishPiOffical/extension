@@ -18,6 +18,7 @@ const editingDraftId = ref<number | null>(null)
 
 const name = ref('')
 const description = ref('')
+const identifier = ref('')
 const price = ref(0)
 const code = ref('')
 const matchUrls = ref('https://fishpi.cn/*')
@@ -106,6 +107,7 @@ onMounted(async () => {
         editingDraftId.value = draft.id
         name.value = draft.name
         description.value = draft.description
+        identifier.value = draft.identifier || ''
         price.value = draft.price
         type.value = draft.type
         language.value = draft.language
@@ -123,6 +125,7 @@ watch(selectedItemId, (newId) => {
     if (item) {
       name.value = item.name
       description.value = item.description
+      identifier.value = item.identifier || ''
       price.value = item.price || 0
       type.value = item.type
       language.value = item.language
@@ -139,6 +142,11 @@ const handleSubmit = async (isDraft: boolean = false) => {
     return
   }
 
+  if (identifier.value && identifier.value.length < 3) {
+    error.value = '标识符长度至少为3位'
+    return
+  }
+
   uploading.value = true
   error.value = ''
 
@@ -148,6 +156,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
       await updateDraft(editingDraftId.value, {
         name: name.value,
         description: description.value,
+        identifier: identifier.value || undefined,
         price: price.value,
         type: type.value,
         code: code.value,
@@ -168,13 +177,16 @@ const handleSubmit = async (isDraft: boolean = false) => {
       await uploadItem({
         name: name.value,
         description: description.value,
+        identifier: identifier.value || undefined,
         price: price.value,
         type: type.value,
         code: code.value,
         language: language.value,
         matchUrls: matchUrls.value ? matchUrls.value.split('\n').map(u => u.trim()).filter(u => u) : [],
         upgradeFromId: mode.value === 'upgrade' && selectedItemId.value ? selectedItemId.value : undefined,
-        isDraft,        dependencyIds: selectedDependencyIds.value,      })
+        isDraft,
+        dependencyIds: selectedDependencyIds.value,
+      })
 
       if (isDraft) {
         Message.success('草稿已保存！')
@@ -269,6 +281,17 @@ const handleSubmit = async (isDraft: boolean = false) => {
               <div class="form-control w-full md:col-span-2">
                 <label class="label mb-2"><span class="text-xs font-black uppercase tracking-widest opacity-40">作品名称</span></label>
                 <input v-model="name" type="text" placeholder="例如: 极简黑色主题" class="input input-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 h-14 font-medium" required />
+              </div>
+
+              <div class="form-control w-full md:col-span-2">
+                <label class="label mb-2">
+                  <span class="text-xs font-black uppercase tracking-widest opacity-40">作品标识符</span>
+                  <span class="text-[10px] opacity-30 font-bold ml-2">最小3位，设置后不可修改</span>
+                </label>
+                <input v-model="identifier" 
+                       type="text" 
+                       placeholder="如: my-dark-theme (可选)" 
+                       class="input input-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 h-14 font-mono font-medium" />
               </div>
 
               <div class="form-control w-full md:col-span-2">
