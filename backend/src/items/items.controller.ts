@@ -180,6 +180,30 @@ export class ItemsController {
     return this.itemsService.clearStorage(uid, id);
   }
 
+  @Get(':id/global-storage/:key')
+  async getGlobalStorageItem(@Param('id', ParseIntPipe) id: number, @Param('key') key: string) {
+    const storage = await this.itemsService.getGlobalStorage(id);
+    return storage[key];
+  }
+
+  @Post(':id/global-storage')
+  async setGlobalStorageItem(@Param('id', ParseIntPipe) id: number, @Body() body: { key: string; value: any }) {
+    if (!body || typeof body.key !== 'string') {
+        throw new BadRequestException('Invalid key');
+    }
+    return this.itemsService.setGlobalStorageItem(id, body.key, body.value);
+  }
+
+  @Delete(':id/global-storage/:key')
+  async removeGlobalStorageItem(@Param('id', ParseIntPipe) id: number, @Param('key') key: string) {
+    return this.itemsService.removeGlobalStorageItem(id, key);
+  }
+
+  @Delete(':id/global-storage')
+  async clearGlobalStorage(@Param('id', ParseIntPipe) id: number) {
+    return this.itemsService.clearGlobalStorage(id);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {

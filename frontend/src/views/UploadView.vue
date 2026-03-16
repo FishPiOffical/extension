@@ -142,6 +142,12 @@ const handleSubmit = async (isDraft: boolean = false) => {
     return
   }
 
+  // Check for globalStorage usage without identifier
+  if (code.value.includes('globalStorage') && !identifier.value) {
+    error.value = '检测到代码中使用了 globalStorage，必须设置【作品标识符】以实现数据隔离存储'
+    return
+  }
+
   if (identifier.value && identifier.value.length < 3) {
     error.value = '标识符长度至少为3位'
     return

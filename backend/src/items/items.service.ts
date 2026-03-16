@@ -4,6 +4,7 @@ import { MoreThan, IsNull, Repository } from 'typeorm';
 import { Item, ItemStatus } from './item.entity';
 import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
+import { GlobalStorage } from './global-storage.entity';
 import { UsersService } from '../users/users.service';
 import Fishpi, { FingerTo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
@@ -17,6 +18,8 @@ export class ItemsService {
     private itemStateRepository: Repository<UserItemState>,
     @InjectRepository(Comment)
     private commentRepository: Repository<Comment>,
+    @InjectRepository(GlobalStorage)
+    private globalStorageRepository: Repository<GlobalStorage>,
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
   ) {}
@@ -1008,6 +1011,56 @@ export class ItemsService {
     if (state) {
       state.storage = {};
       await this.itemStateRepository.save(state);
+    }
+  }
+
+  async getGlobalStorage(itemId: number): Promise<Record<string, any>> {
+    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
+    if (!item?.identifier) return {};
+    const gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
+    return gs?.storage || {};
+  }
+
+  async setGlobalStorageItem(itemId: number, key: string, value: any): Promise<void> {
+    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
+    if (!item?.identifier) {
+      throw new BadRequestException('该作品尚未设置标识符，无法使用 globalStorage');
+    }
+
+    let gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
+    if (!gs) {
+      gs = this.globalStorageRepository.create({ identifier: item.identifier, storage: {} });
+    }
+
+    if (!gs.storage) gs.storage = {};
+    gs.storage[key] = value;
+
+    if (JSON.stringify(gs.storage).length > 1024 * 1024 * 10) {
+      throw new BadRequestException('公用存储数据超过限制 (10MB)');
+    }
+
+    await this.globalStorageRepository.save(gs);
+  }
+
+  async removeGlobalStorageItem(itemId: number, key: string): Promise<void> {
+    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
+    if (!item?.identifier) return;
+
+    const gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
+    if (gs && gs.storage) {
+      delete gs.storage[key];
+      await this.globalStorageRepository.save(gs);
+    }
+  }
+
+  async clearGlobalStorage(itemId: number): Promise<void> {
+    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
+    if (!item?.identifier) return;
+
+    const gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
+    if (gs) {
+      gs.storage = {};
+      await this.globalStorageRepository.save(gs);
     }
   }
 }

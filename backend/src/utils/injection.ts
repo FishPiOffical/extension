@@ -66,6 +66,9 @@ export const defaultAllowGlobals = [
   'GM_xmlhttpRequest',
   'GM_registerMenuCommand',
   'GM_addStyle',
+  // storage export
+  'cloudStorage',
+  'globalStorage',
   // msgbox export
   'msgbox',
 ]
