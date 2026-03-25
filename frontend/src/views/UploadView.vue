@@ -19,6 +19,7 @@ const editingDraftId = ref<number | null>(null)
 const name = ref('')
 const description = ref('')
 const identifier = ref('')
+const oldIdentifier = ref('')
 const price = ref(0)
 const code = ref('')
 const matchUrls = ref('https://fishpi.cn/*')
@@ -108,6 +109,7 @@ onMounted(async () => {
         name.value = draft.name
         description.value = draft.description
         identifier.value = draft.identifier || ''
+        oldIdentifier.value = draft.identifier || ''
         price.value = draft.price
         type.value = draft.type
         language.value = draft.language
@@ -148,7 +150,12 @@ const handleSubmit = async (isDraft: boolean = false) => {
     return
   }
 
-  if (identifier.value && identifier.value.length < 3) {
+  if (!identifier.value) {
+    error.value = '标识符不能为空，至少为3位，且只能包含字母、数字、下划线或连字符'
+    return
+  }
+
+  if (identifier.value.length < 3) {
     error.value = '标识符长度至少为3位'
     return
   }
@@ -296,7 +303,9 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 </label>
                 <input v-model="identifier" 
                        type="text" 
-                       placeholder="如: my-dark-theme (可选)" 
+                       :disabled="oldIdentifier !== ''"
+                       placeholder="如: my-dark-theme"
+                       pattern="^[\w-.]+$" 
                        class="input input-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 h-14 font-mono font-medium" />
               </div>
 

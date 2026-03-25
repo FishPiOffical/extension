@@ -155,6 +155,7 @@ async function activate() {
 
     const promise = (async () => {
       const extension: any = extensionData.find((e: any) => e.id === item)!;
+      const identifier = extension.identifier || extension.id;
       if (extension?.matchUrls && extension.matchUrls.length > 0) {
         if (!extension.matchUrls.some((pattern: string) => matchUrl(pattern, location.href, location.pathname))) {
           return;
@@ -169,17 +170,17 @@ async function activate() {
       const newLocalStorage = {
         ...localStorage,
         setItem(key: string, value: string) {
-          return localStorage.setItem(`ext:${item}:${key}`, value);
+          return localStorage.setItem(`ext:${identifier}:${key}`, value);
         },
         getItem(key: string) {
-          return localStorage.getItem(`ext:${item}:${key}`);
+          return localStorage.getItem(`ext:${identifier}:${key}`);
         },
         removeItem(key: string) {
-          localStorage.removeItem(`ext:${item}:${key}`);
+          localStorage.removeItem(`ext:${identifier}:${key}`);
         },
         clear() {
           Object.keys(localStorage).forEach(key => {
-            if (key.startsWith(`ext:${item}:`)) {
+            if (key.startsWith(`ext:${identifier}:`)) {
               localStorage.removeItem(key);
             }
           });
@@ -188,17 +189,17 @@ async function activate() {
       const newSessionStorage = {
         ...sessionStorage,
         setItem(key: string, value: string) {
-          return sessionStorage.setItem(`ext:${item}:${key}`, value);
+          return sessionStorage.setItem(`ext:${identifier}:${key}`, value);
         },
         getItem(key: string) {
-          return sessionStorage.getItem(`ext:${item}:${key}`);
+          return sessionStorage.getItem(`ext:${identifier}:${key}`);
         },
         removeItem(key: string) {
-          sessionStorage.removeItem(`ext:${item}:${key}`);
+          sessionStorage.removeItem(`ext:${identifier}:${key}`);
         },
         clear() {
           Object.keys(sessionStorage).forEach(key => {
-            if (key.startsWith(`ext:${item}:`)) {
+            if (key.startsWith(`ext:${identifier}:`)) {
               sessionStorage.removeItem(key);
             }
           });

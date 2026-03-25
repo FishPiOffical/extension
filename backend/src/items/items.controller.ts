@@ -137,6 +137,7 @@ export class ItemsController {
         id: i.id, 
         name: i.name, 
         matchUrls: i.matchUrls,
+        identifier: i.identifier,
         dependencies: i.dependencies?.map(d => d.id) || []
       }));
 
