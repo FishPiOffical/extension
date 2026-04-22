@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { getMyPublishedItems, getMyDrafts, publishDraft, withdrawItem, deleteItem, getPurchasedItems, toggleItemState, type Item } from '@/api/items'
+import { getMyPublishedItems, getMyDrafts, publishDraft, withdrawItem, deleteItem, getPurchasedItems, toggleItemState, getItemVersions, type Item } from '@/api/items'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import DevDocsModal from '@/components/docs/DevDocsModal.vue'
@@ -16,6 +16,10 @@ const authStore = useAuthStore()
 const allItems = ref<Item[]>([])
 const myPurchases = ref<Item[]>([])
 const loading = ref(true)
+
+const expandedProjects = ref<Record<number, boolean>>({})
+const extraVersions = ref<Record<number, Item[]>>({})
+const loadingVersions = ref<Record<number, boolean>>({})
 
 const searchQuery = ref('')
 const typeFilter = ref<'all' | 'extension' | 'theme'>('all')
@@ -167,6 +171,25 @@ const editWork = (item: Item) => {
   }
 }
 
+const toggleVersionHistory = async (project: (typeof groupedWorks.value)[0]) => {
+  const key = project.rootId
+  if (expandedProjects.value[key]) {
+    expandedProjects.value[key] = false
+    return
+  }
+  expandedProjects.value[key] = true
+  if (extraVersions.value[key]) return // already loaded
+  loadingVersions.value[key] = true
+  try {
+    const res = await getItemVersions(project.mainItem.id)
+    const currentIds = new Set(project.items.map(i => i.id))
+    extraVersions.value[key] = (res.data as Item[]).filter(v => !currentIds.has(v.id))
+  } catch (e) {
+    console.error(e)
+  }
+  loadingVersions.value[key] = false
+}
+
 const getStatusBadge = (status: string) => {
   switch (status) {
     case 'approved': return { text: '已上架', class: 'bg-success/10 text-success' }
@@ -306,6 +329,47 @@ onMounted(() => {
                   </div>
                 </div>
              </div>
+
+             <!-- Extra versions (loaded on demand) -->
+             <template v-if="expandedProjects[project.rootId]">
+               <span v-if="loadingVersions[project.rootId]" class="loading loading-spinner loading-xs opacity-40"></span>
+               <div v-for="item in extraVersions[project.rootId]" :key="item.id"
+                    class="group/v relative py-1 px-3 bg-base-200/50 rounded-full flex items-center gap-2 hover:bg-base-200 transition-colors opacity-60">
+                 <span class="text-[10px] font-black italic">v{{ item.version }}</span>
+                 <div class="w-1.5 h-1.5 rounded-full" :class="{
+                   'bg-success': item.status === 'approved',
+                   'bg-warning': item.status === 'pending',
+                   'bg-error': item.status === 'rejected',
+                   'bg-base-content/20': item.status === 'draft',
+                 }"></div>
+                 <div class="absolute bottom-full left-1/2 -translate-x-1/2 pb-2 hidden group-hover/v:block z-50">
+                   <div class="bg-base-300 text-base-content p-3 rounded-2xl shadow-xl border border-base-200 w-64">
+                     <div class="flex justify-between items-center mb-2">
+                       <span class="text-xs font-black">v{{ item.version }} {{ getStatusBadge(item.status).text }}</span>
+                       <span class="text-[10px] opacity-40">{{ new Date(item.createdAt).toLocaleDateString() }}</span>
+                     </div>
+                     <p v-if="item.reviewComment" class="text-[10px] bg-error/10 text-error p-2 rounded-lg mb-2">
+                       拒绝理由: {{ item.reviewComment }}
+                     </p>
+                     <div class="flex gap-2">
+                       <button @click="handleToggleUse(item)"
+                               class="btn btn-xs flex-1"
+                               :class="isUsing(item.id) ? 'btn-error' : 'btn-success'">
+                         {{ isUsing(item.id) ? '停用' : '使用' }}
+                       </button>
+                       <button v-if="item.status === 'approved'" @click="router.push(`/item/${item.id}`)" class="btn btn-xs btn-ghost bg-base-100 flex-1">详情</button>
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             </template>
+
+             <!-- Toggle button -->
+             <button @click="toggleVersionHistory(project)"
+                     class="py-1 px-3 rounded-full text-[10px] font-black uppercase tracking-widest opacity-30 hover:opacity-70 hover:bg-base-300 transition-all flex items-center gap-1">
+               <Icon :icon="expandedProjects[project.rootId] ? 'mdi:chevron-up' : 'mdi:history'" class="w-3 h-3" />
+               {{ expandedProjects[project.rootId] ? '收起' : '历史版本' }}
+             </button>
           </div>
         </div>
 

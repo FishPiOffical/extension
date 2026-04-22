@@ -806,8 +806,15 @@ export class ItemsService {
       .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
       .leftJoinAndSelect('item.dependencies', 'dependencies')
       .where('author.id = :userId', { userId })
-      .orderBy('item.version', 'DESC')
-      .addOrderBy('item.createdAt', 'DESC')
+      .andWhere(qb => {
+        const subQuery = qb.subQuery()
+          .select('1')
+          .from(Item, 'newer')
+          .where('newer.upgradeFromId = item.id')
+          .getQuery();
+        return `NOT EXISTS ${subQuery}`;
+      })
+      .orderBy('item.createdAt', 'DESC')
       .getMany();
   }
 
