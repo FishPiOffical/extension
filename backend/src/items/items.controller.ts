@@ -65,16 +65,16 @@ export class ItemsController {
 
   @Get(':id.js')
   async getItemCode(@Param('id') id: number, @Query('userId') userId: string, @Res() res) {
-    const item = await this.itemsService.findOne(id);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Content-Type', 'application/javascript');
+    const item = await this.itemsService.findApprovedItemById(id);
     if (item.status !== ItemStatus.APPROVED) {
       if (!userId || item.author.id !== userId) {
         throw new ForbiddenException('Item not approved');
       }
     }
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Content-Type', 'application/javascript');
     if (item.type !== ItemType.EXTENSION) {
       res.send(`console.warn('Only extension type items can be loaded as scripts');`);
       return;
@@ -91,16 +91,16 @@ export class ItemsController {
 
   @Get(':id.css')
   async getItemStyle(@Param('id', ParseIntPipe) id: number, @Query('userId') userId: string, @Res() res) {
-    const item = await this.itemsService.findOne(id);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Content-Type', 'text/css');
+    const item = await this.itemsService.findApprovedItemById(id);
     if (item.status !== ItemStatus.APPROVED) {
       if (!userId || item.author.id !== userId) {
         throw new ForbiddenException('Item not approved');
       }
     }
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Content-Type', 'text/css');
     if (item.type !== ItemType.THEME) {
       res.send(`/* Only theme type items can be loaded as styles */`);
       return;

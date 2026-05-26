@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, UnauthorizedException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, IsNull, Repository } from 'typeorm';
+import { promisify } from 'util';
+import { gzip, gunzip } from 'zlib';
+import * as fsp from 'fs/promises';
+import * as path from 'path';
 import { Item, ItemStatus } from './item.entity';
 import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
@@ -23,6 +27,52 @@ export class ItemsService {
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
   ) {}
+
+  private readonly approvedItemsCache = new Map<number, Item>();
+  private readonly CACHE_DIR = path.join(process.cwd(), 'cache', 'items');
+
+  private readonly gzipAsync = promisify(gzip);
+  private readonly gunzipAsync = promisify(gunzip);
+
+  private async writeApprovedItemCache(item: Item): Promise<void> {
+    try {
+      await fsp.mkdir(this.CACHE_DIR, { recursive: true });
+      const compressed = await this.gzipAsync(JSON.stringify(item));
+      await fsp.writeFile(path.join(this.CACHE_DIR, `${item.id}.json.gz`), compressed);
+    } catch (e) {
+      console.error(`Failed to write item cache [${item.id}]:`, e);
+    }
+  }
+
+  public async findApprovedItemById(id: number): Promise<Item | null> {
+    // 1. 内存缓存
+    const cached = this.approvedItemsCache.get(id);
+    if (cached) return cached;
+
+    // 2. 文件缓存
+    try {
+      const compressed = await fsp.readFile(path.join(this.CACHE_DIR, `${id}.json.gz`));
+      const decompressed = await this.gunzipAsync(compressed);
+      const item = JSON.parse(decompressed.toString('utf-8')) as Item;
+      this.approvedItemsCache.set(id, item);
+      return item;
+    } catch {
+      // 文件不存在或损坏，由调用方查数据库
+    }
+
+    // 缓存中没有（待审核或草稿），直接查数据库
+    const item = await this.itemsRepository.findOne({
+      where: { id },
+      relations: ['author', 'dependencies'],
+    });
+    // 若从数据库取到的是已审核项目，回填缓存
+    if (item?.status === ItemStatus.APPROVED) {
+      this.approvedItemsCache.set(item.id, item);
+      this.writeApprovedItemCache(item);
+    }
+
+    return item;
+  }
 
   async create(data: Partial<Item>, authorId: string, upgradeFromId?: number, isDraft: boolean = false, dependencyIds?: number[]): Promise<Item> {
     const author = await this.usersService.findById(authorId);
@@ -104,7 +154,19 @@ export class ItemsService {
       }
     }
     
-    return query.getMany();
+    const result = await query.getMany();
+
+    // 查询 APPROVED 列表时顺带填充缓存，供 findOne 使用
+    if (status === ItemStatus.APPROVED) {
+      for (const item of result) {
+        if (!this.approvedItemsCache.has(item.id)) {
+          this.approvedItemsCache.set(item.id, item);
+          this.writeApprovedItemCache(item);
+        }
+      }
+    }
+
+    return result;
   }
 
   async findByAuthor(username: string): Promise<Item[]> {
@@ -200,10 +262,8 @@ export class ItemsService {
   }
 
   async findOne(id: number, userId?: string): Promise<any> {
-    const item = await this.itemsRepository.findOne({
-      where: { id },
-      relations: ['author', 'dependencies'],
-    });
+    // 优先从已审核缓存中获取
+    let item: Item | null = await this.findApprovedItemById(id);
 
     if (!item) {
       throw new NotFoundException('没找到');
