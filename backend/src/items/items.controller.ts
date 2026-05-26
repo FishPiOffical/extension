@@ -70,6 +70,10 @@ export class ItemsController {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Content-Type', 'application/javascript');
     const item = await this.itemsService.findApprovedItemById(id);
+    if (!item) {
+      res.send(`console.warn('Item not found');`);
+      return;
+    }
     if (item.status !== ItemStatus.APPROVED) {
       if (!userId || item.author.id !== userId) {
         throw new ForbiddenException('Item not approved');
@@ -96,6 +100,10 @@ export class ItemsController {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Content-Type', 'text/css');
     const item = await this.itemsService.findApprovedItemById(id);
+    if (!item) {
+      res.send(`/* Item not found */`);
+      return;
+    }
     if (item.status !== ItemStatus.APPROVED) {
       if (!userId || item.author.id !== userId) {
         throw new ForbiddenException('Item not approved');
