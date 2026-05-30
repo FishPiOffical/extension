@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { getItems, purchaseItem, getPurchasedItems } from '@/api/items'
@@ -13,22 +13,62 @@ const authStore = useAuthStore()
 const items = ref<any[]>([])
 const myPurchases = ref<any[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
 const activeTab = ref('all')
 const searchQuery = ref('')
 
-const loadItems = async () => {
-  loading.value = true
+const currentPage = ref(1)
+const limit = 12
+const totalItems = ref(0)
+
+const hasMore = computed(() => {
+  return items.value.length < totalItems.value
+})
+
+const loadItems = async (isLoadMore = false) => {
+  if (isLoadMore) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+    currentPage.value = 1
+  }
+
   try {
+    const params = {
+      search: searchQuery.value.trim() || undefined,
+      type: activeTab.value !== 'all' ? activeTab.value : undefined,
+      page: currentPage.value,
+      limit,
+    }
+
     const [itemsRes, purchasesRes] = await Promise.all([
-      getItems(),
-      authStore.isAuthenticated ? getPurchasedItems() : Promise.resolve({ data: [] })
+      getItems(params),
+      authStore.isAuthenticated && !isLoadMore ? getPurchasedItems() : Promise.resolve({ data: myPurchases.value })
     ])
-    items.value = itemsRes.data
-    myPurchases.value = purchasesRes.data
+    
+    if (isLoadMore) {
+      items.value = [...items.value, ...(itemsRes.data.items || [])]
+    } else {
+      items.value = itemsRes.data.items || []
+    }
+    totalItems.value = itemsRes.data.total || 0
+
+    if (!isLoadMore) {
+      myPurchases.value = purchasesRes.data
+    }
   } catch (error) {
     console.error('Failed to load items:', error)
+  } finally {
+    loading.value = false
+    loadingMore.value = false
   }
-  loading.value = false
+}
+
+const loadMore = async () => {
+  if (hasMore.value && !loadingMore.value) {
+    currentPage.value++
+    await loadItems(true)
+  }
 }
 
 const handlePurchase = async (item: any) => {
@@ -64,23 +104,7 @@ const handlePurchase = async (item: any) => {
 }
 
 const filteredItems = computed(() => {
-  let filtered = items.value
-  
-  // Tab filter
-  if (activeTab.value !== 'all') {
-    filtered = filtered.filter(item => item.type === activeTab.value)
-  }
-
-  // Search filter
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(item => 
-      item.name.toLowerCase().includes(query) || 
-      item.description?.toLowerCase().includes(query)
-    )
-  }
-
-  return filtered
+  return items.value
 })
 
 const isPurchased = (item: any) => {
@@ -96,6 +120,22 @@ const getOwnedVersionOfSameProject = (item: any) => {
     p.author.id === item.author.id
   )
 }
+
+// 监听分类变化
+watch(activeTab, () => {
+  loadItems()
+})
+
+// 监听搜索词变化并防抖
+let searchDebounceTimeout: any = null
+watch(searchQuery, () => {
+  if (searchDebounceTimeout) {
+    clearTimeout(searchDebounceTimeout)
+  }
+  searchDebounceTimeout = setTimeout(() => {
+    loadItems()
+  }, 300)
+})
 
 onMounted(() => {
   loadItems()
@@ -222,6 +262,18 @@ onMounted(() => {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 加载更多 -->
+    <div v-if="hasMore" class="flex justify-center mt-8">
+      <button 
+        @click="loadMore" 
+        :disabled="loadingMore"
+        class="btn btn-primary px-8"
+      >
+        <span v-if="loadingMore" class="loading loading-spinner loading-xs"></span>
+        加载更多
+      </button>
     </div>
   </div>
 </template>

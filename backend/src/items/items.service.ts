@@ -155,7 +155,13 @@ export class ItemsService {
     return this.itemsRepository.save(item);
   }
 
-  async findAll(status?: ItemStatus): Promise<Item[]> {
+  async findAll(
+    status?: ItemStatus,
+    search?: string,
+    type?: ItemType,
+    page?: number,
+    limit?: number,
+  ): Promise<{ items: Item[]; total: number }> {
     const query = this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.purchasedBy', 'purchasedBy')
@@ -178,12 +184,35 @@ export class ItemsService {
         });
       }
     }
-    
-    const result = await query.getMany();
+
+    if (type) {
+      query.andWhere('item.type = :type', { type });
+    }
+
+    if (search) {
+      query.andWhere('(item.name LIKE :search OR item.description LIKE :search)', { search: `%${search}%` });
+    }
+
+    query.orderBy('item.createdAt', 'DESC');
+
+    let total = 0;
+    let items: Item[] = [];
+
+    if (page !== undefined && limit !== undefined) {
+      const skip = (page - 1) * limit;
+      const take = limit;
+      const [pagedItems, count] = await query.skip(skip).take(take).getManyAndCount();
+      items = pagedItems;
+      total = count;
+    } else {
+      const allItems = await query.getMany();
+      items = allItems;
+      total = allItems.length;
+    }
 
     // 查询 APPROVED 列表时顺带填充缓存，供 findOne 使用
     if (status === ItemStatus.APPROVED) {
-      for (const item of result) {
+      for (const item of items) {
         if (!this.approvedItemsCache.has(item.id)) {
           this.approvedItemsCache.set(item.id, item);
           this.writeApprovedItemCache(item);
@@ -191,7 +220,7 @@ export class ItemsService {
       }
     }
 
-    return result;
+    return { items, total };
   }
 
   async findByAuthor(username: string): Promise<Item[]> {
@@ -639,13 +668,14 @@ export class ItemsService {
     }
   }
 
-  async getUserPurchases(userId: string) {
+  async getUserPurchases(userId: string, type?: ItemType): Promise<any[]> {
     const items = await this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.dependencies', 'dependencies')
       .leftJoin('item.purchasedBy', 'purchasedBy')
       .leftJoin(UserItemState, 'state', 'state.itemId = item.id AND state.userId = :userId', { userId })
       .where('purchasedBy.id = :userId OR (author.id = :userId AND state.id IS NOT NULL)', { userId })
+      .andWhere(type ? 'item.type = :type' : '1=1', { type })
       .getMany();
 
     const states = await this.itemStateRepository.find({

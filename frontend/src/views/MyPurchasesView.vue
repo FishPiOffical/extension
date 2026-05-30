@@ -20,7 +20,7 @@ const loadPurchasedItems = async () => {
       getItems()
     ])
     items.value = purchasedRes.data
-    latestItems.value = latestRes.data
+    latestItems.value = latestRes.data.items || latestRes.data
   } catch (error) {
     console.error('Failed to load purchased items:', error)
     message.error('加载已购项目失败')

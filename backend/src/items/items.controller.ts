@@ -28,8 +28,21 @@ export class ItemsController {
   ) {}
 
   @Get()
-  async findAll() {
-    return this.itemsService.findAll(ItemStatus.APPROVED);
+  async findAll(
+    @Query('search') search?: string,
+    @Query('type') type?: ItemType,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : undefined;
+    const limitNum = limit ? parseInt(limit, 10) : undefined;
+    return this.itemsService.findAll(
+      ItemStatus.APPROVED,
+      search,
+      type,
+      pageNum,
+      limitNum,
+    );
   }
 
   @Get('pending')
@@ -38,13 +51,14 @@ export class ItemsController {
     if (!req.user.isAdmin) {
       throw new ForbiddenException('Admin access required');
     }
-    return this.itemsService.findAll(ItemStatus.PENDING);
+    const { items } = await this.itemsService.findAll(ItemStatus.PENDING);
+    return items;
   }
 
   @Get('my-purchases')
   @UseGuards(JwtAuthGuard)
-  async getMyPurchases(@Request() req) {
-    return this.itemsService.getUserPurchases(req.user.userId);
+  async getMyPurchases(@Request() req, @Query('type') type?: ItemType) {
+    return this.itemsService.getUserPurchases(req.user.userId, type);
   }
 
   @Get('my-published')

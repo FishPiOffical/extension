@@ -313,7 +313,7 @@ onMounted(async () => {
       getItems()
     ])
     myItems.value = myRes.data.filter((item: Item) => item.type === 'app-extension' || item.type === 'app-theme')
-    allApprovedItems.value = allRes.data
+    allApprovedItems.value = allRes.data.items || allRes.data
   } catch(e) { console.error(e) }
 
   const upgradeFromId = route.query.upgradeFromId

@@ -66,8 +66,8 @@ export interface ReviewItemData {
 /**
  * Get all approved items (marketplace)
  */
-export function getItems() {
-  return request.get<Item[]>('/items')
+export function getItems(params?: { search?: string; type?: string; page?: number; limit?: number }) {
+  return request.get<{ items: Item[]; total: number }>('/items', { params })
 }
 
 /**

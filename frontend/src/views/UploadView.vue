@@ -65,7 +65,7 @@ onMounted(async () => {
       getItems()
     ])
     myItems.value = myRes.data
-    allApprovedItems.value = allRes.data
+    allApprovedItems.value = allRes.data.items || allRes.data
   } catch(e) { console.error(e) }
 
   // Check if upgrading from an item

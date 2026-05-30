@@ -126,6 +126,41 @@
 * **返回值**：
   * 返回 `Content-Type: application/json` 的主题配置数据 JSON 结构。
 
+### 5. 获取全部已发布扩展/主题列表 (扩展集市支持分页、搜索、分类)
+
+* **请求路径**：`GET /api/items`
+* **请求参数 (Query Params)**：
+  * `search`: `string` (可选，模糊搜索匹配名称或描述)
+  * `type`: `'extension' | 'theme' | 'app-extension' | 'app-theme'` (可选，类型分类过滤)
+  * `page`: `number` (可选，页码，如果不传则返回符合条件的全部数据)
+  * `limit`: `number` (可选，每页数据条数限制，同 `page` 配合使用)
+* **正确返回示例 (`data` 内层数据)**：
+  ```json
+  {
+    "items": [
+      {
+        "id": 12,
+        "name": "极简聊天助手",
+        "description": "适合 FishPi APP 的客户端扩展辅助程序，自动生成周报模板说明。",
+        "type": "app-extension",
+        "code": "...",
+        "language": "javascript",
+        "status": "approved",
+        "price": 0,
+        "version": 1,
+        "matchUrls": null,
+        "identifier": "me.seven.chat-helper",
+        "createdAt": "2026-05-30T00:00:00.000Z",
+        "author": {
+          "id": "1631234567890",
+          "username": "seven"
+        }
+      }
+    ],
+    "total": 1
+  }
+  ```
+
 ---
 
 ## 四、 上传/发布扩展或主题接口 (Upload)
@@ -171,6 +206,96 @@
     },
     "msg": ""
   }
+  ```
+
+---
+
+## 五、 个人资产与作品管理接口
+
+### 1. 获取我的已购/使用项目列表
+
+获取当前登录用户已购买、已添加或正在使用的作品列表（包含插件、主题以及移动端应用扩展/主题等），支持按类型过滤。
+
+* **请求路径**：`GET /api/items/my-purchases`
+* **请求头 (Headers)**：
+  * `Authorization`: `Bearer <token>` (必填)
+* **请求参数 (Query Params)**：
+  * `type`: `'extension' | 'theme' | 'app-extension' | 'app-theme'` (可选，按类型过滤)
+* **正确返回示例 (`data` 内层数据)**：
+  ```json
+  [
+    {
+      "id": 12,
+      "name": "极简聊天助手",
+      "description": "适合 FishPi APP 的客户端扩展辅助程序，自动生成周报模板说明。",
+      "type": "app-extension",
+      "status": "approved",
+      "price": 0,
+      "version": 1,
+      "isEnabled": true,
+      "isAutoUpdate": true,
+      "author": {
+        "id": "1631234567890",
+        "username": "seven"
+      }
+    }
+  ]
+  ```
+
+### 2. 获取我发布的项目列表
+
+获取当前登录用户发布的全部作品（含已审核、待审核等），可通过该接口核对自身发布的作品及各自的版本状态。
+
+* **请求路径**：`GET /api/items/my-published`
+* **请求头 (Headers)**：
+  * `Authorization`: `Bearer <token>` (必填)
+* **请求参数 (Query Params)**：
+  * `type`: `'extension' | 'theme' | 'app-extension' | 'app-theme'` (可选，按类型过滤)
+* **正确返回示例 (`data` 内层数据)**：
+  ```json
+  [
+    {
+      "id": 12,
+      "name": "极简聊天助手",
+      "description": "适合 FishPi APP 的客户端扩展辅助程序，自动生成周报模板说明。",
+      "type": "app-extension",
+      "status": "approved",
+      "price": 0,
+      "version": 1,
+      "author": {
+        "id": "1631234567890",
+        "username": "seven"
+      }
+    }
+  ]
+  ```
+
+### 3. 获取我的草稿项目列表
+
+获取当前登录用户处于草稿箱里、未提交审核状态下的草稿作品列表。
+
+* **请求路径**：`GET /api/items/my-drafts`
+* **请求头 (Headers)**：
+  * `Authorization`: `Bearer <token>` (必填)
+* **请求参数 (Query Params)**：
+  * `type`: `'extension' | 'theme' | 'app-extension' | 'app-theme'` (可选，按类型过滤)
+* **正确返回示例 (`data` 内层数据)**：
+  ```json
+  [
+    {
+      "id": 25,
+      "name": "未完工的主题草稿",
+      "description": "极客风格备用套件",
+      "type": "app-theme",
+      "status": "draft",
+      "price": 100,
+      "version": 1,
+      "author": {
+        "id": "1631234567890",
+        "username": "seven"
+      }
+    }
+  ]
   ```
 
 
