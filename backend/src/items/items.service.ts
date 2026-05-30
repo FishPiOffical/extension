@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import { gzip, gunzip } from 'zlib';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { Item, ItemStatus } from './item.entity';
+import { Item, ItemStatus, ItemType } from './item.entity';
 import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
 import { GlobalStorage } from './global-storage.entity';
@@ -75,6 +75,31 @@ export class ItemsService {
   }
 
   async create(data: Partial<Item>, authorId: string, upgradeFromId?: number, isDraft: boolean = false, dependencyIds?: number[]): Promise<Item> {
+    if (data.type === ItemType.APP_EXTENSION || data.type === ItemType.APP_THEME) {
+      data.matchUrls = null;
+      if (data.type === ItemType.APP_EXTENSION) {
+        if (!data.code) {
+          throw new BadRequestException('代码不能为空');
+        }
+        const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/;
+        if (!regex.test(data.code)) {
+          throw new BadRequestException('APP扩展内容前端必须包含 // ==FishPiPlugin== 与 // ==/FishPiPlugin== 元数据');
+        }
+      } else if (data.type === ItemType.APP_THEME) {
+        if (!data.code) {
+          throw new BadRequestException('配置内容不能为空');
+        }
+        try {
+          const parsed = JSON.parse(data.code);
+          if (typeof parsed !== 'object' || parsed === null) {
+            throw new BadRequestException('APP主题内容必须是一个有效的JSON对象');
+          }
+        } catch (e: any) {
+          throw new BadRequestException('APP主题内容必须是一个合法的JSON格式: ' + e.message);
+        }
+      }
+    }
+
     const author = await this.usersService.findById(authorId);
     
     let version = 1;
@@ -112,7 +137,7 @@ export class ItemsService {
     }
 
     let dependencies = [];
-    if (dependencyIds && dependencyIds.length > 0) {
+    if (dependencyIds && dependencyIds.length > 0 && data.type !== ItemType.APP_EXTENSION && data.type !== ItemType.APP_THEME) {
       dependencies = await this.itemsRepository.find({
         where: dependencyIds.map(id => ({ id }))
       });
@@ -860,12 +885,13 @@ export class ItemsService {
     await this.itemsRepository.remove(item);
   }
 
-  async findMyItems(userId: string): Promise<Item[]> {
+  async findMyItems(userId: string, type?: ItemType): Promise<Item[]> {
     return this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
       .leftJoinAndSelect('item.dependencies', 'dependencies')
       .where('author.id = :userId', { userId })
+      .andWhere(type ? 'item.type = :type' : '1=1', { type })
       .andWhere(qb => {
         const subQuery = qb.subQuery()
           .select('1')
@@ -878,7 +904,7 @@ export class ItemsService {
       .getMany();
   }
 
-  async findMyDrafts(userId: string): Promise<Item[]> {
+  async findMyDrafts(userId: string, type?: ItemType): Promise<Item[]> {
     return this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
       .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
@@ -903,7 +929,7 @@ export class ItemsService {
       throw new UnauthorizedException('无权修改此草稿');
     }
 
-    if (dependencyIds) {
+    if (dependencyIds && data.type !== ItemType.APP_EXTENSION && data.type !== ItemType.APP_THEME) {
       if (dependencyIds.length > 0) {
         item.dependencies = await this.itemsRepository.find({
           where: dependencyIds.map(id => ({ id }))
@@ -911,6 +937,8 @@ export class ItemsService {
       } else {
         item.dependencies = [];
       }
+    } else if (data.type === ItemType.APP_EXTENSION || data.type === ItemType.APP_THEME) {
+      item.dependencies = [];
     }
 
     // If item already has an identifier, don't allow changing it
@@ -919,6 +947,32 @@ export class ItemsService {
     }
 
     Object.assign(item, data);
+
+    if (item.type === ItemType.APP_EXTENSION || item.type === ItemType.APP_THEME) {
+      item.matchUrls = null;
+      if (item.type === ItemType.APP_EXTENSION) {
+        if (!item.code) {
+          throw new BadRequestException('代码不能为空');
+        }
+        const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/;
+        if (!regex.test(item.code)) {
+          throw new BadRequestException('APP扩展内容前端必须包含 // ==FishPiPlugin== 与 // ==/FishPiPlugin== 元数据');
+        }
+      } else if (item.type === ItemType.APP_THEME) {
+        if (!item.code) {
+          throw new BadRequestException('配置内容不能为空');
+        }
+        try {
+          const parsed = JSON.parse(item.code);
+          if (typeof parsed !== 'object' || parsed === null) {
+            throw new BadRequestException('APP主题内容必须是一个有效的JSON对象');
+          }
+        } catch (e: any) {
+          throw new BadRequestException('APP主题内容必须是一个合法的JSON格式: ' + e.message);
+        }
+      }
+    }
+
     return this.itemsRepository.save(item);
   }
 

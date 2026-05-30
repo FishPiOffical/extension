@@ -39,6 +39,12 @@ const router = createRouter({
           meta: { requiresAuth: true },
         },
         {
+          path: 'app-upload',
+          name: 'app-upload',
+          component: () => import('../views/AppUploadView.vue'),
+          meta: { requiresAuth: true },
+        },
+        {
           path: 'my-purchases',
           name: 'my-purchases',
           component: () => import('../views/MyPurchasesView.vue'),

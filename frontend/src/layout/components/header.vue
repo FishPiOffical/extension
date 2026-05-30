@@ -62,10 +62,27 @@ const logout = () => {
         <div class="w-px h-6 bg-base-300 mx-1"></div>
 
         <!-- Upload Button -->
-        <RouterLink v-if="authStore.isAuthenticated" to="/upload" class="btn btn-primary btn-sm">
-          <Icon icon="mdi:code-tags" class="text-base" />
-          发布作品
-        </RouterLink>
+        <div v-if="authStore.isAuthenticated" class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-primary btn-sm flex items-center gap-1">
+            <Icon icon="mdi:code-tags" class="text-base" />
+            <span>发布作品</span>
+            <Icon icon="mdi:chevron-down" class="text-xs opacity-60" />
+          </div>
+          <ul tabindex="0" class="dropdown-content z-50 menu p-2 shadow-xl bg-base-100 rounded-2xl w-48 mt-2 border border-base-200/60 font-semibold text-sm">
+            <li>
+              <RouterLink to="/upload" class="flex items-center gap-2 py-2.5 px-3">
+                <Icon icon="mdi:web" class="text-base text-primary" />
+                <span>网页扩展与主题</span>
+              </RouterLink>
+            </li>
+            <li>
+              <RouterLink to="/app-upload" class="flex items-center gap-2 py-2.5 px-3">
+                <Icon icon="mdi:cellphone" class="text-base text-secondary" />
+                <span>APP扩展与主题</span>
+              </RouterLink>
+            </li>
+          </ul>
+        </div>
 
         <template v-if="!authStore.isAuthenticated">
           <a href="/api/auth/login" class="btn btn-primary btn-sm rounded-full px-6 font-medium">登录</a>

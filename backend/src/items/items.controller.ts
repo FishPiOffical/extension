@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
   Res,
   Delete,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ItemsService } from './items.service';
@@ -48,14 +49,14 @@ export class ItemsController {
 
   @Get('my-published')
   @UseGuards(JwtAuthGuard)
-  async getMyPublished(@Request() req) {
-    return this.itemsService.findMyItems(req.user.userId);
+  async getMyPublished(@Request() req, @Query('type') type?: ItemType) {
+    return this.itemsService.findMyItems(req.user.userId, type);
   }
 
   @Get('my-drafts')
   @UseGuards(JwtAuthGuard)
-  async getMyDrafts(@Request() req) {
-    return this.itemsService.findMyDrafts(req.user.userId);
+  async getMyDrafts(@Request() req, @Query('type') type?: ItemType) {
+    return this.itemsService.findMyDrafts(req.user.userId, type);
   }
 
   @Get('author/:username')
@@ -155,6 +156,98 @@ export class ItemsController {
       .replace(/['"`]{{#UserId}}['"`]/, `'${user.id}'`)
       .replace(/\[`{{#ExtensionData}}`\]/, JSON.stringify(extensionData))
     );
+  }
+
+  @Get(':id/app-extension')
+  async getAppExtensions(@Param('id') id: string, @Request() req) {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const items = await this.itemsService.getUserPurchases(user.id);
+    const host = req.headers.host;
+    const protocol = req.protocol || 'http';
+    const baseUrl = `${protocol}://${host}`;
+    
+    return items
+      .filter(p => p.type === ItemType.APP_EXTENSION && p.isEnabled)
+      .map(i => ({
+        id: i.id,
+        name: i.name,
+        identifier: i.identifier,
+        author: i.author?.username,
+        version: i.version,
+        url: `${baseUrl}/api/items/${i.id}/app-extension.js`
+      }));
+  }
+
+  @Get(':id/app-theme')
+  async getAppThemes(@Param('id') id: string, @Request() req) {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      return [];
+    }
+    const items = await this.itemsService.getUserPurchases(user.id);
+    const host = req.headers.host;
+    const protocol = req.protocol || 'http';
+    const baseUrl = `${protocol}://${host}`;
+    
+    return items
+      .filter(p => p.type === ItemType.APP_THEME && p.isEnabled)
+      .map(i => ({
+        id: i.id,
+        name: i.name,
+        identifier: i.identifier,
+        author: i.author?.username,
+        version: i.version,
+        url: `${baseUrl}/api/items/${i.id}/app-theme.json`
+      }));
+  }
+
+  @Get(':id/app-extension.js')
+  async getAppExtensionCode(@Param('id', ParseIntPipe) id: number, @Query('userId') userId: string, @Res() res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Content-Type', 'application/javascript');
+    const item = await this.itemsService.findApprovedItemById(id);
+    if (!item) {
+      res.send(`console.warn('Item not found');`);
+      return;
+    }
+    if (item.status !== ItemStatus.APPROVED) {
+      if (!userId || item.author.id !== userId) {
+        throw new ForbiddenException('Item not approved');
+      }
+    }
+    if (item.type !== ItemType.APP_EXTENSION) {
+      res.send(`console.warn('Only app-extension type items can be loaded as scripts');`);
+      return;
+    }
+    res.send(item.code);
+  }
+
+  @Get(':id/app-theme.json')
+  async getAppThemeCode(@Param('id', ParseIntPipe) id: number, @Query('userId') userId: string, @Res() res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Content-Type', 'application/json');
+    const item = await this.itemsService.findApprovedItemById(id);
+    if (!item) {
+      res.status(404).send({ message: 'Item not found' });
+      return;
+    }
+    if (item.status !== ItemStatus.APPROVED) {
+      if (!userId || item.author.id !== userId) {
+        throw new ForbiddenException('Item not approved');
+      }
+    }
+    if (item.type !== ItemType.APP_THEME) {
+      res.status(400).send({ message: 'Only app-theme type items can be loaded as json' });
+      return;
+    }
+    res.send(item.code);
   }
 
   @Get(':id/storage/:key')

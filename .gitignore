@@ -6,3 +6,4 @@ uploads
 .DS_Store
 config.json
 release
+**/cache/*

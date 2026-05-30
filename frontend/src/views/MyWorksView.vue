@@ -158,8 +158,10 @@ const handleToggleUse = async (item: Item) => {
 }
 
 const editWork = (item: Item) => {
+  const isApp = item.type === 'app-extension' || item.type === 'app-theme'
+  const uploadPath = isApp ? '/app-upload' : '/upload'
   if (item.status === 'draft') {
-    router.push({ path: '/upload', query: { draftId: item.id.toString() } })
+    router.push({ path: uploadPath, query: { draftId: item.id.toString() } })
   } else {
     // Check if project already has a pending or draft update
     const project = groupedWorks.value.find(p => p.items.some(i => i.id === item.id))
@@ -167,7 +169,7 @@ const editWork = (item: Item) => {
       Message.warning('已有正在进行的升级或草稿，不能再次触发升级')
       return
     }
-    router.push({ path: '/upload', query: { upgradeFromId: item.id.toString() } })
+    router.push({ path: uploadPath, query: { upgradeFromId: item.id.toString() } })
   }
 }
 

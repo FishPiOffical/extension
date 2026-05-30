@@ -5,6 +5,8 @@ import { Comment } from './comment.entity';
 export enum ItemType {
   EXTENSION = 'extension',
   THEME = 'theme',
+  APP_EXTENSION = 'app-extension',
+  APP_THEME = 'app-theme',
 }
 
 export enum ItemStatus {

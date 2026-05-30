@@ -4,7 +4,7 @@ export interface Item {
   id: number
   name: string
   description: string
-  type: 'extension' | 'theme'
+  type: 'extension' | 'theme' | 'app-extension' | 'app-theme'
   code: string
   language: string
   status: 'draft' | 'pending' | 'approved' | 'rejected'
@@ -49,7 +49,7 @@ export interface UploadItemData {
   description: string
   identifier?: string
   price: number
-  type: 'extension' | 'theme'
+  type: 'extension' | 'theme' | 'app-extension' | 'app-theme'
   code: string
   language: string
   matchUrls?: string[]
