@@ -16,6 +16,13 @@ export enum ItemStatus {
   REJECTED = 'rejected',
 }
 
+export const ItemTypeLabels = {
+  [ItemType.EXTENSION]: '扩展',
+  [ItemType.THEME]: '主题',
+  [ItemType.APP_EXTENSION]: 'APP扩展',
+  [ItemType.APP_THEME]: 'APP主题',
+};
+
 @Entity()
 export class Item {
   @PrimaryGeneratedColumn()

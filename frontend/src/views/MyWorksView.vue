@@ -251,6 +251,8 @@ onMounted(() => {
             <option value="all">全部类型</option>
             <option value="extension">扩展</option>
             <option value="theme">主题</option>
+            <option value="app-extension">APP扩展</option>
+            <option value="app-theme">APP主题</option>
           </select>
         </div>
       </div>

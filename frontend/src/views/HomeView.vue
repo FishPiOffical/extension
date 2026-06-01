@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { getItems, purchaseItem, getPurchasedItems } from '@/api/items'
+import { getItems, purchaseItem, getPurchasedItems, ItemTypeLabels } from '@/api/items'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
@@ -180,6 +180,16 @@ onMounted(() => {
             class="btn btn-sm join-item px-4"
             :class="activeTab === 'theme' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
           >主题</button>
+          <button 
+            @click="activeTab = 'app-extension'" 
+            class="btn btn-sm join-item px-4"
+            :class="activeTab === 'app-extension' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
+          >APP插件</button>
+          <button 
+            @click="activeTab = 'app-theme'" 
+            class="btn btn-sm join-item px-4"
+            :class="activeTab === 'app-theme' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
+          >APP主题</button>
         </div>
       </div>
     </header>
@@ -202,8 +212,8 @@ onMounted(() => {
         
         <div class="flex items-start gap-4 mb-4">
           <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors"
-                :class="item.type === 'extension' ? 'bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-content' : 'bg-secondary/20 text-secondary group-hover:bg-secondary group-hover:text-secondary-content'">
-            <Icon :icon="item.type === 'extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-7 h-7" />
+                :class="item.type === 'extension' ? 'bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-content' : item.type === 'theme' ? 'bg-secondary/20 text-secondary group-hover:bg-secondary group-hover:text-secondary-content' : item.type === 'app-extension' ? 'bg-primary/20 text-primary group-hover:bg-primary group-hover:text-primary-content' : 'bg-secondary/20 text-secondary group-hover:bg-secondary group-hover:text-secondary-content'">
+            <Icon :icon="item.type === 'extension' ? 'mdi:code-tags' : item.type === 'theme' ? 'mdi:palette-outline' : item.type === 'app-extension' ? 'mdi:code-tags' : 'mdi:palette-outline'" class="w-7 h-7" />
           </div>
           <div class="flex-1 min-w-0">
             <h2 class="font-bold text-base truncate flex items-center gap-1.5 group-hover:text-primary transition-colors">
@@ -212,8 +222,8 @@ onMounted(() => {
             </h2>
             <div class="flex items-center gap-2 mt-0.5">
               <span class="badge badge-sm border-none px-2 font-medium" 
-                :class="item.type === 'extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
-                {{ item.type === 'extension' ? '插件' : '主题' }}
+                :class="item.type === 'extension' ? 'bg-primary/20 text-primary' : item.type === 'theme' ? 'bg-secondary/20 text-secondary' : item.type === 'app-extension' ? 'bg-primary/20 text-primary' : 'bg-secondary/20 text-secondary'">
+                {{ ItemTypeLabels[item.type] }}
               </span>
               <router-link :to="`/user/${item.author?.username}`" @click.stop class="text-xs opacity-40 hover:text-primary transition-colors truncate">@{{ item.author?.username || '匿名' }}</router-link>
             </div>

@@ -5,7 +5,7 @@ import { promisify } from 'util';
 import { gzip, gunzip } from 'zlib';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { Item, ItemStatus, ItemType } from './item.entity';
+import { Item, ItemStatus, ItemType, ItemTypeLabels } from './item.entity';
 import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
 import { GlobalStorage } from './global-storage.entity';
@@ -507,7 +507,7 @@ export class ItemsService {
       FingerTo(ConfigService.getConfig()?.noticeGoldenKey)
         .sendNotice(
           item.author.username, 
-          `您的${item.type === 'extension' ? '扩展' : '主题'}《[${
+          `您的${ItemTypeLabels[item.type]}《[${
             item.name
           }](https://ext.adventext.fun/item/${item.id})》${
             statusResult
@@ -608,10 +608,7 @@ export class ItemsService {
       }
 
       if (item.price > 0 && user.id !== item.author.id) {
-        const type = {
-          extension: '扩展',
-          theme: '主题',
-        }[item.type];
+        const type = ItemTypeLabels[item.type];
         await this.usersService.updatePoints(user.username, -item.price, `购买${type} ${item.name}`);
         await this.usersService.updatePoints(item.author.username, item.price * 0.7, `出售${type} ${item.name}`);
         await this.usersService.updatePoints('admin', item.price * 0.3, `买卖${type} ${item.name} 手续费`);
@@ -1094,7 +1091,7 @@ export class ItemsService {
         noticeFinger.sendNotice(
           username.trim(), 
           `用户${item.author.username}发布了新的${
-            item.type === 'extension' ? '扩展' : '主题'
+            ItemTypeLabels[item.type]
           }《${item.name}》[待审核](https://ext.adventext.fun/admin)`
         );
        });

@@ -1,5 +1,13 @@
 import request from '../utils/request'
 
+
+export const ItemTypeLabels: any = {
+  'extension': '扩展',
+  'theme': '主题',
+  'app-extension': 'APP扩展',
+  'app-theme': 'APP主题',
+};
+
 export interface Item {
   id: number
   name: string
