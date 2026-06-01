@@ -98,6 +98,9 @@ export class ItemsController {
       res.send(`console.warn('Only extension type items can be loaded as scripts');`);
       return;
     }
+    if (item.status === ItemStatus.APPROVED) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
     const allowGlobals = defaultAllowGlobals;
     const code =`export const activate = async (window, document, fishpi) => {
   const { ${allowGlobals.join(', ')} } = window; // 允许访问这些全局变量
@@ -127,6 +130,9 @@ export class ItemsController {
     if (item.type !== ItemType.THEME) {
       res.send(`/* Only theme type items can be loaded as styles */`);
       return;
+    }
+    if (item.status === ItemStatus.APPROVED) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
     res.send(item.code);
   }
@@ -238,6 +244,9 @@ export class ItemsController {
       res.send(`console.warn('Only app-extension type items can be loaded as scripts');`);
       return;
     }
+    if (item.status === ItemStatus.APPROVED) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
     res.send(item.code);
   }
 
@@ -260,6 +269,9 @@ export class ItemsController {
     if (item.type !== ItemType.APP_THEME) {
       res.status(400).send({ message: 'Only app-theme type items can be loaded as json' });
       return;
+    }
+    if (item.status === ItemStatus.APPROVED) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
     res.send(item.code);
   }
