@@ -48,7 +48,8 @@ const themeState = ref({
     'info': '#0B5C93',
     'success': '#42D94D',
     'warning': '#EAB308',
-    'error': '#E53935'
+    'error': '#E53935',
+    'message-outgoing': '#0B5C93',
   },
   radius: {
     'radius-selector': 40,
@@ -104,7 +105,8 @@ const defaultThemeCode = `{
     "info": "#0B5C93",
     "success": "#42D94D",
     "warning": "#EAB308",
-    "error": "#E53935"
+    "error": "#E53935",
+    "message-outgoing": "#0B5C93",
   },
   "radius": {
     "radius-selector": 40,
@@ -208,6 +210,8 @@ const generateRandomColors = () => {
   const accentContent = getContrastColor(accent);
   const neutralContent = getContrastColor(neutral);
 
+  const messageOutgoing = secondary;
+
   const success = '#22C55E';
   const warning = '#EAB308';
   const errorColor = '#EF4444';
@@ -229,7 +233,8 @@ const generateRandomColors = () => {
     'info': info,
     'success': success,
     'warning': warning,
-    'error': errorColor
+    'error': errorColor,
+    'message-outgoing': messageOutgoing,
   };
 };
 
@@ -565,8 +570,8 @@ const handleSubmit = async (isDraft: boolean = false) => {
                   <span class="text-[8px] opacity-40 font-bold">我</span>
                   <div class="p-2 leading-relaxed"
                        :style="{
-                         background: themeState.colors['secondary'],
-                         color: themeState.colors['secondary-content'],
+                         background: themeState.colors['message-outgoing'],
+                         color: themeState.colors['base-content'],
                          borderRadius: themeState.radius['radius-box'] + 'px',
                          padding: themeState.spacing['item'] + 'px'
                        }"
