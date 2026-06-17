@@ -19,7 +19,7 @@
 在网站上添加如下代码即可使用：
 
 ```html
-<script src="https://ext.adventext.fun/api/items/<user_oId>/loader.js"></script>
+<script type="module" src="https://ext.adventext.fun/api/items/<user_oId>/loader.js"></script>
 ```
 
 ## 扩展开发
