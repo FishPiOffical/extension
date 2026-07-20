@@ -163,10 +163,11 @@ export class ItemsService {
     limit?: number,
   ): Promise<{ items: Item[]; total: number }> {
     const query = this.itemsRepository.createQueryBuilder('item')
-      .leftJoinAndSelect('item.author', 'author')
-      .leftJoinAndSelect('item.purchasedBy', 'purchasedBy')
-      .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
-      .leftJoinAndSelect('item.dependencies', 'dependencies');
+      .leftJoinAndSelect('item.author', 'author');
+      // 移除不必要的关联查询以提升性能：
+      // - purchasedBy：列表页不需要购买用户信息
+      // - upgradeFrom：列表页不需要升级来源
+      // - dependencies：列表页不需要依赖项目
     
     if (status) {
       query.where('item.status = :status', { status });
@@ -226,9 +227,7 @@ export class ItemsService {
   async findByAuthor(username: string): Promise<Item[]> {
     const query = this.itemsRepository.createQueryBuilder('item')
       .leftJoinAndSelect('item.author', 'author')
-      .leftJoinAndSelect('item.purchasedBy', 'purchasedBy')
-      .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
-      .leftJoinAndSelect('item.dependencies', 'dependencies')
+      // 移除不必要的关联查询以提升性能
       .where('author.username = :username', { username })
       .andWhere('item.status = :status', { status: ItemStatus.APPROVED });
     

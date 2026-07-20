@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, ManyToMany, JoinTable, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, ManyToMany, JoinTable, OneToMany, Index } from 'typeorm';
 import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 
@@ -24,6 +24,9 @@ export const ItemTypeLabels = {
 };
 
 @Entity()
+@Index(['status', 'createdAt'])  // 复合索引，优化列表查询
+@Index(['status', 'type'])        // 复合索引，优化按类型筛选
+@Index(['upgradeFromId', 'status']) // 优化子查询性能
 export class Item {
   @PrimaryGeneratedColumn()
   id: number;
@@ -59,6 +62,7 @@ export class Item {
   author: User;
 
   @Column({ nullable: true, comment: '项目标识符', length: 100 })
+  @Index() // 添加索引，用于快速查找
   identifier: string;
 
   @Column({ nullable: true })
