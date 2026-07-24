@@ -298,4 +298,40 @@
   ]
   ```
 
+### 4. 更新草稿内容
+
+开发者可以持续更新处于草稿状态的作品内容。
+
+* **请求路径**：`POST /api/items/draft/:id/update`
+* **请求头 (Headers)**：
+  * `Authorization`: `Bearer <token>` (必填)
+* **请求体 (JSON Body)**：
+  与 `POST /api/items/upload` 结构一致（全字段可选）。
+* **正确返回示例 (`data` 内层数据)**：
+  返回更新后的草稿对象。
+
+### 5. 删除草稿
+
+* **请求路径**：`DELETE /api/items/:id`
+* **请求头 (Headers)**：
+  * `Authorization`: `Bearer <token>` (必填)
+* **正确返回示例 (`data` 内层数据)**：
+  ```json
+  {
+    "code": 0,
+    "data": null,
+    "msg": "删除成功"
+  }
+  ```
+
+### 6. 发布草稿 (提交审核)
+
+将草稿箱中的作品正式提交到审核流程。
+
+* **请求路径**：`POST /api/items/draft/:id/publish`
+* **请求头 (Headers)**：
+  * `Authorization`: `Bearer <token>` (必填)
+* **正确返回示例 (`data` 内层数据)**：
+  返回状态变为 `pending` 的作品对象。
+
 
