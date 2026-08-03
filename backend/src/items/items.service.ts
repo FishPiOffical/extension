@@ -405,7 +405,7 @@ export class ItemsService {
       throw new NotFoundException('没找到');
     }
 
-    const isPurchased = userId ? await this.itemsRepository.createQueryBuilder('item')
+    const isPurchased = userId && item.author.id !== userId ? await this.itemsRepository.createQueryBuilder('item')
       .innerJoin('item.purchasedBy', 'purchasedBy')
       .where('item.id = :id AND purchasedBy.id = :userId', { id, userId })
       .getCount() > 0 : false;
@@ -413,6 +413,7 @@ export class ItemsService {
     const purchaseCountResult = await this.itemsRepository.createQueryBuilder('item')
       .leftJoin('item.purchasedBy', 'purchasedBy')
       .where('item.id = :id', { id })
+      .andWhere('(purchasedBy.id IS NULL OR purchasedBy.id != item.authorId)')
       .select('COUNT(purchasedBy.id)', 'count')
       .getRawOne();
     
@@ -553,7 +554,12 @@ export class ItemsService {
           where: { user: { id: user.id }, item: { id: item.id } }
         });
 
-        if (!newState && (!wasEnabled || inheritedRules.allowUrls.length || inheritedRules.blockUrls.length)) {
+        if (!newState && (
+          !wasEnabled ||
+          inheritedRules.allowUrls.length ||
+          inheritedRules.blockUrls.length ||
+          user.id === item.author.id
+        )) {
           newState = this.itemStateRepository.create({
             user: user,
             item: item,
@@ -569,11 +575,17 @@ export class ItemsService {
 
         // Transfer ownership
         try {
-          await this.itemsRepository.createQueryBuilder()
-            .relation(Item, 'purchasedBy')
-            .of(item.id)
-            .add(user.id);
-          
+          if (user.id !== item.author.id) {
+            await this.itemsRepository.createQueryBuilder()
+              .relation(Item, 'purchasedBy')
+              .of(item.id)
+              .add(user.id);
+          } else {
+            await this.itemsRepository.createQueryBuilder()
+              .relation(Item, 'purchasedBy')
+              .of(item.id)
+              .remove(user.id);
+          }
           await this.itemsRepository.createQueryBuilder()
             .relation(Item, 'purchasedBy')
             .of(item.upgradeFrom.id)
@@ -657,6 +669,11 @@ export class ItemsService {
 
     if (item.status !== ItemStatus.APPROVED) {
       throw new BadRequestException('未通过审核');
+    }
+
+    if (item.author.id === userId) {
+      await this.toggleItemState(itemId, userId, true);
+      return item;
     }
 
     // Check if already purchased
@@ -781,7 +798,7 @@ export class ItemsService {
       .leftJoinAndSelect('item.dependencies', 'dependencies')
       .leftJoin('item.purchasedBy', 'purchasedBy')
       .leftJoin(UserItemState, 'state', 'state.itemId = item.id AND state.userId = :userId', { userId })
-      .where('purchasedBy.id = :userId OR (author.id = :userId AND state.id IS NOT NULL)', { userId })
+      .where('(purchasedBy.id = :userId AND author.id != :userId) OR (author.id = :userId AND state.id IS NOT NULL)', { userId })
       .andWhere(type ? 'item.type = :type' : '1=1', { type })
       .getMany();
 
@@ -837,6 +854,8 @@ export class ItemsService {
       throw new UnauthorizedException('您尚未拥有此项目');
     }
 
+    const isAuthor = item.author.id === userId;
+
     // 如果当前要开启，则关闭该项目（同作者、同名、同类型）的其他版本
     if (isEnabled) {
       const allVersionsOfProject = await this.itemsRepository.find({
@@ -846,6 +865,15 @@ export class ItemsService {
           type: item.type,
         }
       });
+
+      if (isAuthor) {
+        for (const version of allVersionsOfProject) {
+          await this.itemsRepository.createQueryBuilder()
+            .relation(Item, 'purchasedBy')
+            .of(version.id)
+            .remove(userId);
+        }
+      }
       
       let storageToMigrate = null;
       let allowUrlsToMigrate: string[] = [];

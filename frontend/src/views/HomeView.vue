@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { getItems, purchaseItem, getPurchasedItems, ItemTypeLabels } from '@/api/items'
+import { getItems, purchaseItem, getPurchasedItems, toggleItemState, ItemTypeLabels } from '@/api/items'
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
@@ -103,6 +103,32 @@ const handlePurchase = async (item: any) => {
   }
 }
 
+const handleAuthorInstall = async (item: any) => {
+  const ownedVersion = getOwnedVersionOfSameProject(item)
+  if (ownedVersion) {
+    const isUpdate = (item.version || 1) > (ownedVersion.version || 1)
+    const confirmed = await MessageBox.confirm(
+      `从 v${ownedVersion.version || 1} ${isUpdate ? '升级' : '切换'}到 v${item.version || 1}？`,
+      isUpdate ? '版本升级' : '切换版本'
+    )
+    if (!confirmed) return
+  }
+
+  if (!await checkDependencies(item, {
+    title: '运行依赖',
+    messagePrefix: '此作品需要以下依赖',
+    messageSuffix: '继续安装？'
+  })) return
+
+  try {
+    await toggleItemState(item.id, true)
+    Message.success(ownedVersion ? '切换成功' : '安装成功')
+    await loadItems()
+  } catch (error: any) {
+    console.error('Install failed:', error)
+  }
+}
+
 const filteredItems = computed(() => {
   return items.value
 })
@@ -110,6 +136,10 @@ const filteredItems = computed(() => {
 const isPurchased = (item: any) => {
   if (!authStore.isAuthenticated) return false
   return myPurchases.value.some((p: any) => p.id === item.id)
+}
+
+const isAuthor = (item: any) => {
+  return authStore.isAuthenticated && item.author?.id === authStore.user?.id
 }
 
 const getOwnedVersionOfSameProject = (item: any) => {
@@ -248,7 +278,15 @@ onMounted(() => {
 
           <div class="flex gap-2">
             <template v-if="!isPurchased(item)">
-              <button v-if="getOwnedVersionOfSameProject(item)"
+              <button v-if="isAuthor(item)"
+                      @click.stop="handleAuthorInstall(item)"
+                      class="btn btn-sm btn-primary">
+                <template v-if="getOwnedVersionOfSameProject(item)">
+                  {{ (item.version || 1) > (getOwnedVersionOfSameProject(item).version || 1) ? '升级' : '切换' }}
+                </template>
+                <template v-else>安装</template>
+              </button>
+              <button v-else-if="getOwnedVersionOfSameProject(item)"
                       :disabled="!authStore.isAuthenticated"
                       @click.stop="handlePurchase(item)" 
                       class="btn btn-sm btn-primary">

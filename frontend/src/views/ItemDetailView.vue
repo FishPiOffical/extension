@@ -223,14 +223,23 @@ const toggleAutoUpdate = async () => {
 
 const handleUseAuthorItem = async () => {
   if (!item.value) return
+  const owned = ownedVersionOfSameProject.value
+  if (owned) {
+    const isUpdate = (item.value.version || 1) > (owned.version || 1)
+    const confirmed = await MessageBox.confirm(
+      `从 v${owned.version || 1} ${isUpdate ? '升级' : '切换'}到 v${item.value.version || 1}？`,
+      isUpdate ? '版本升级' : '切换版本'
+    )
+    if (!confirmed) return
+  }
   if (!await checkDependencies(item.value, {
-    title: '预览版本依赖提示',
-    messagePrefix: '此预览版本具有以下依赖，请确保它们已启用',
-    messageSuffix: '是否继续启用预览？'
+    title: '运行依赖',
+    messagePrefix: '此作品需要以下依赖',
+    messageSuffix: '继续安装？'
   })) return
   try {
     await toggleItemState(item.value.id, true)
-    message.success('已开始使用该版本（开发者模式）')
+    message.success(owned ? '切换成功' : '安装成功')
     await loadItem()
   } catch (error) {
     console.error('Failed to use author item:', error)
@@ -414,7 +423,10 @@ onMounted(() => {
             <div v-else-if="!isPurchased && isAuthor" class="space-y-3">
               <button @click="handleUseAuthorItem" 
                       class="btn btn-primary btn-block rounded-xl h-12">
-                使用此版本
+                <template v-if="ownedVersionOfSameProject">
+                  {{ (item.version || 1) > (ownedVersionOfSameProject.version || 1) ? '升级' : '切换' }}
+                </template>
+                <template v-else>安装</template>
               </button>
               <button
                 v-if="item.type === 'extension' || item.type === 'theme'"

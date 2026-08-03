@@ -6,9 +6,11 @@ import message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
 import UrlRulesModal from '@/components/UrlRulesModal.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const { checkDependencies } = useDependencyCheck()
 const router = useRouter()
+const authStore = useAuthStore()
 const items = ref<any[]>([])
 const latestItems = ref<any[]>([])
 const loading = ref(true)
@@ -58,8 +60,12 @@ const handleUpgrade = async (item: any, latest: any) => {
   })) return
 
   try {
-    await purchaseItem(latest.id)
-    message.success('升级成功！')
+    if (item.author?.id === authStore.user?.id) {
+      await toggleItemState(latest.id, true)
+    } else {
+      await purchaseItem(latest.id)
+    }
+    message.success('升级成功')
     await loadPurchasedItems()
   } catch (error: any) {
     console.error('Upgrade failed:', error)
@@ -101,8 +107,11 @@ const toggleEnabled = async (item: any) => {
 }
 
 const handleRemove = async (item: any) => {
-  let warningMsg = `确定要从账号中移除 <b class="text-error">${item.name}</b> 吗？<br><br>移除后您将无法继续使用此${item.type === 'extension' ? '扩展' : '主题'}以及获得相关更新。`
-  if (item.price && item.price > 0) {
+  const isAuthor = item.author?.id === authStore.user?.id
+  let warningMsg = isAuthor
+    ? `卸载 <b>${item.name}</b>？`
+    : `确定要从账号中移除 <b class="text-error">${item.name}</b> 吗？<br><br>移除后您将无法继续使用此${item.type === 'extension' ? '扩展' : '主题'}以及获得相关更新。`
+  if (!isAuthor && item.price && item.price > 0) {
     warningMsg += `<br><br><span class="text-error font-bold">警告：此为付费项目，移除后购买费用（ ${item.price} 积分 ）将不会退回！重新获取将需再次付费！</span>`
   }
 
@@ -117,7 +126,7 @@ const handleRemove = async (item: any) => {
 
   try {
     await removePurchaseItem(item.id)
-    message.success('移除成功')
+    message.success(isAuthor ? '已卸载' : '移除成功')
     await loadPurchasedItems()
   } catch (error: any) {
     console.error('Remove failed:', error)
