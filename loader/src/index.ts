@@ -1,6 +1,7 @@
 import Fishpi from 'fishpi/browser';
 import * as GM from './gm';
 import * as msgbox from './msgbox';
+import { isUrlAllowed } from './url-rules';
 const defaultAllowGlobals = [
   'crypto',
   'console',
@@ -57,12 +58,6 @@ const defaultAllowGlobals = [
   'removeEventListener',
   'Element',
 ]
-
-function matchUrl(pattern: string, currentHref: string, currentPath: string) {
-  const p = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  const regex = new RegExp('^' + p + '$');
-  return regex.test(pattern.startsWith('/') ? currentPath : currentHref);
-}
 
 function readOnly(obj: any, fields: string[]) {
   // 浅拷贝原始对象
@@ -148,6 +143,7 @@ async function activate() {
   const themeItems = [`{{#Themes}}`];
   const userId = '{{#UserId}}';
   const extensionData = [`{{#ExtensionData}}`] as any[];
+  const globalUrlRules = [`{{#GlobalUrlRules}}`] as any;
   const activationMap = new Map<any, Promise<void>>();
 
   async function activateExtension(item: any) {
@@ -155,12 +151,9 @@ async function activate() {
 
     const promise = (async () => {
       const extension: any = extensionData.find((e: any) => e.id === item)!;
+      if (!extension) return;
       const identifier = extension.identifier || extension.id;
-      if (extension?.matchUrls && extension.matchUrls.length > 0) {
-        if (!extension.matchUrls.some((pattern: string) => matchUrl(pattern, location.href, location.pathname))) {
-          return;
-        }
-      }
+      if (!isUrlAllowed(location.href, location.pathname, extension.matchUrls, globalUrlRules, extension)) return;
 
       if (extension?.dependencies && extension.dependencies.length > 0) {
         const deps = extension.dependencies.filter((id: any) => jsItems.includes(id));
@@ -298,11 +291,8 @@ async function activate() {
 
   themeItems.forEach(async item => {
     const extension: any = extensionData.find((e: any) => e.id === item)!;
-    if (extension?.matchUrls && extension.matchUrls.length > 0) {
-      if (!extension.matchUrls.some((pattern: string) => matchUrl(pattern, location.href, location.pathname))) {
-        return;
-      }
-    }
+    if (!extension) return;
+    if (!isUrlAllowed(location.href, location.pathname, extension.matchUrls, globalUrlRules, extension)) return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.id = `theme-${item}`;

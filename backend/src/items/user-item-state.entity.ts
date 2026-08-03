@@ -22,4 +22,10 @@ export class UserItemState {
 
   @Column({ type: 'simple-json', nullable: true, comment: '配置数据' })
   storage: Record<string, any>;
+
+  @Column({ type: 'simple-json', nullable: true, comment: '白名单地址' })
+  allowUrls: string[];
+
+  @Column({ type: 'simple-json', nullable: true, comment: '黑名单地址' })
+  blockUrls: string[];
 }

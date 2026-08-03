@@ -394,18 +394,18 @@ const handleSubmit = async (isDraft: boolean = false) => {
     if (type.value === 'app-extension') {
       const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/
       if (!regex.test(code.value)) {
-        error.value = 'APP扩展前端内容必须包含 // ==FishPiPlugin== 到 // ==/FishPiPlugin== 头部声明元数据'
+        error.value = '客户端扩展必须包含 FishPiPlugin 头部'
         return
       }
     } else if (type.value === 'app-theme') {
       try {
         const parsed = JSON.parse(code.value)
         if (typeof parsed !== 'object' || parsed === null) {
-          error.value = 'APP主题内容必须是一个有效的JSON对象'
+          error.value = '客户端主题内容必须是 JSON 对象'
           return
         }
       } catch (err: any) {
-        error.value = 'APP主题内容必须是一个合法的JSON格式: ' + err.message
+        error.value = '客户端主题 JSON 格式错误: ' + err.message
         return
       }
     }
@@ -482,11 +482,11 @@ const handleSubmit = async (isDraft: boolean = false) => {
         <div class="mt-12 space-y-6">
           <div class="flex items-center gap-4">
             <div class="w-6 h-6 rounded-full bg-success/10 text-success flex items-center justify-center text-[10px] font-black mt-1">1</div>
-            <p class="text-sm font-bold text-base-content/60">APP 扩展必须以 FishPiPlugin 头部格式开始</p>
+            <p class="text-sm font-bold text-base-content/60">客户端扩展需包含 FishPiPlugin 头部</p>
           </div>
           <div class="flex items-center gap-4">
             <div class="w-6 h-6 rounded-full bg-success/10 text-success flex items-center justify-center text-[10px] font-black mt-1">2</div>
-            <p class="text-sm font-bold text-base-content/60">APP 主题必须是合法的 JSON 格式配置</p>
+            <p class="text-sm font-bold text-base-content/60">客户端主题需使用 JSON 格式</p>
           </div>
           <div class="flex items-center gap-4">
             <div class="w-6 h-6 rounded-full bg-success/10 text-success flex items-center justify-center text-[10px] font-black mt-1">3</div>
@@ -657,7 +657,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
 
               <div class="form-control w-full md:col-span-2">
                 <label class="label mb-2"><span class="text-xs font-black uppercase tracking-widest opacity-40">作品名称</span></label>
-                <input v-model="name" type="text" placeholder="例如: 简约炫彩APP主题" class="input input-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 h-14 font-medium" required />
+                <input v-model="name" type="text" placeholder="例如: 简约炫彩主题" class="input input-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 h-14 font-medium" required />
               </div>
 
               <div class="form-control w-full md:col-span-2">
@@ -681,8 +681,8 @@ const handleSubmit = async (isDraft: boolean = false) => {
               <div class="form-control w-full">
                 <label class="label mb-2"><span class="text-xs font-black uppercase tracking-widest opacity-40">项目类型</span></label>
                 <select v-model="type" class="select select-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 h-14 font-bold" @change="handleTypeChange">
-                  <option value="app-extension">APP扩展 (JavaScript)</option>
-                  <option value="app-theme">APP主题 (JSON/Theme配色)</option>
+                  <option value="app-extension">客户端扩展</option>
+                  <option value="app-theme">客户端主题</option>
                 </select>
               </div>
 
@@ -841,7 +841,7 @@ const handleSubmit = async (isDraft: boolean = false) => {
                 <div v-if="currentEditorTab === 'raw'" class="relative group">
                   <textarea 
                     v-model="code" 
-                    placeholder="在此处编辑您的 APP 主题 JSON 配置..." 
+                    placeholder="编辑主题 JSON"
                     class="textarea textarea-bordered w-full rounded-2xl bg-base-100 border-base-300 focus:border-primary px-6 py-6 h-120 font-mono text-sm leading-relaxed" 
                     required 
                   ></textarea>

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsdown && shx mv ./dist/loader.mjs ../backend/loader.min.js",
     "build": "tsdown",
+    "test": "node --test src/url-rules.test.ts",
     "postbuild": "shx mv ./dist/loader.mjs ../release/loader.min.js"
   },
   "author": "Hancel.Lin",

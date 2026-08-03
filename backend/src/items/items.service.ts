@@ -9,6 +9,7 @@ import { Item, ItemStatus, ItemType, ItemTypeLabels } from './item.entity';
 import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
 import { GlobalStorage } from './global-storage.entity';
+import { UserUrlRule } from './user-url-rule.entity';
 import { UsersService } from '../users/users.service';
 import Fishpi, { FingerTo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
@@ -20,6 +21,8 @@ export class ItemsService {
     private itemsRepository: Repository<Item>,
     @InjectRepository(UserItemState)
     private itemStateRepository: Repository<UserItemState>,
+    @InjectRepository(UserUrlRule)
+    private userUrlRuleRepository: Repository<UserUrlRule>,
     @InjectRepository(Comment)
     private commentRepository: Repository<Comment>,
     @InjectRepository(GlobalStorage)
@@ -33,6 +36,86 @@ export class ItemsService {
 
   private readonly gzipAsync = promisify(gzip);
   private readonly gunzipAsync = promisify(gunzip);
+
+  private normalizeUrlRules(urls: unknown): string[] {
+    if (!Array.isArray(urls)) return [];
+    return [...new Set(urls
+      .filter((url): url is string => typeof url === 'string')
+      .map(url => url.trim())
+      .filter(Boolean))];
+  }
+
+  private formatUrlRules(rule?: { allowUrls?: string[]; blockUrls?: string[] } | null) {
+    return {
+      allowUrls: this.normalizeUrlRules(rule?.allowUrls),
+      blockUrls: this.normalizeUrlRules(rule?.blockUrls),
+    };
+  }
+
+  private async findOwnedItem(itemId: number, userId: string): Promise<Item> {
+    const item = await this.itemsRepository.createQueryBuilder('item')
+      .leftJoin('item.purchasedBy', 'purchasedBy')
+      .leftJoinAndSelect('item.author', 'author')
+      .where('item.id = :itemId', { itemId })
+      .andWhere('(purchasedBy.id = :userId OR author.id = :userId)', { userId })
+      .getOne();
+    if (!item) throw new UnauthorizedException('您尚未拥有此项目');
+    if (item.type !== ItemType.EXTENSION && item.type !== ItemType.THEME) {
+      throw new BadRequestException('仅网页扩展和主题支持网址设置');
+    }
+    return item;
+  }
+
+  async getUserUrlRules(userId: string) {
+    const rule = await this.userUrlRuleRepository.findOne({
+      where: { user: { id: userId } },
+    });
+    return this.formatUrlRules(rule);
+  }
+
+  async setUserUrlRules(userId: string, allowUrls: unknown, blockUrls: unknown) {
+    const user = await this.usersService.findById(userId);
+    if (!user) throw new NotFoundException('找不到此用户');
+    const rules = this.formatUrlRules({ allowUrls: allowUrls as string[], blockUrls: blockUrls as string[] });
+    let rule = await this.userUrlRuleRepository.findOne({
+      where: { user: { id: userId } },
+    });
+    if (!rule) rule = this.userUrlRuleRepository.create({ user });
+    Object.assign(rule, rules);
+    await this.userUrlRuleRepository.save(rule);
+    return rules;
+  }
+
+  async getItemUrlRules(itemId: number, userId: string) {
+    await this.findOwnedItem(itemId, userId);
+    const state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } },
+    });
+    return this.formatUrlRules(state);
+  }
+
+  async setItemUrlRules(itemId: number, userId: string, allowUrls: unknown, blockUrls: unknown) {
+    const [user, item] = await Promise.all([
+      this.usersService.findById(userId),
+      this.findOwnedItem(itemId, userId),
+    ]);
+    if (!user) throw new NotFoundException('找不到此用户');
+    const rules = this.formatUrlRules({ allowUrls: allowUrls as string[], blockUrls: blockUrls as string[] });
+    let state = await this.itemStateRepository.findOne({
+      where: { user: { id: userId }, item: { id: itemId } },
+    });
+    if (!state) {
+      state = this.itemStateRepository.create({
+        user,
+        item,
+        isEnabled: true,
+        isAutoUpdate: true,
+      });
+    }
+    Object.assign(state, rules);
+    await this.itemStateRepository.save(state);
+    return rules;
+  }
 
   private async writeApprovedItemCache(item: Item): Promise<void> {
     try {
@@ -83,7 +166,7 @@ export class ItemsService {
         }
         const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/;
         if (!regex.test(data.code)) {
-          throw new BadRequestException('APP扩展内容前端必须包含 // ==FishPiPlugin== 与 // ==/FishPiPlugin== 元数据');
+          throw new BadRequestException('客户端扩展必须包含 FishPiPlugin 头部');
         }
       } else if (data.type === ItemType.APP_THEME) {
         if (!data.code) {
@@ -92,10 +175,10 @@ export class ItemsService {
         try {
           const parsed = JSON.parse(data.code);
           if (typeof parsed !== 'object' || parsed === null) {
-            throw new BadRequestException('APP主题内容必须是一个有效的JSON对象');
+            throw new BadRequestException('客户端主题内容必须是 JSON 对象');
           }
         } catch (e: any) {
-          throw new BadRequestException('APP主题内容必须是一个合法的JSON格式: ' + e.message);
+          throw new BadRequestException('客户端主题 JSON 格式错误: ' + e.message);
         }
       }
     }
@@ -459,6 +542,7 @@ export class ItemsService {
       }
 
       for (const { user, wasEnabled, state } of ownersToUpdate) {
+        const inheritedRules = this.formatUrlRules(state);
         // Remove old version state if exists
         if (state) {
           await this.itemStateRepository.remove(state);
@@ -469,13 +553,17 @@ export class ItemsService {
           where: { user: { id: user.id }, item: { id: item.id } }
         });
 
-        if (!newState && !wasEnabled) {
+        if (!newState && (!wasEnabled || inheritedRules.allowUrls.length || inheritedRules.blockUrls.length)) {
           newState = this.itemStateRepository.create({
             user: user,
             item: item,
             isEnabled: wasEnabled,
-            isAutoUpdate: true
+            isAutoUpdate: true,
+            ...inheritedRules,
           });
+          await this.itemStateRepository.save(newState);
+        } else if (newState) {
+          Object.assign(newState, inheritedRules);
           await this.itemStateRepository.save(newState);
         }
 
@@ -588,9 +676,13 @@ export class ItemsService {
     });
 
     let ownsOtherVersion = false;
+    let previousState: UserItemState | null = null;
     for (const v of allVersions) {
       if (v.id !== item.id && v.purchasedBy?.some(u => u.id === userId)) {
         ownsOtherVersion = true;
+        previousState = await this.itemStateRepository.findOne({
+          where: { user: { id: userId }, item: { id: v.id } },
+        });
         // Remove ownership from other versions (User can only own one version at a time)
         v.purchasedBy = v.purchasedBy.filter(u => u.id !== userId);
         await this.itemsRepository.save(v);
@@ -620,6 +712,25 @@ export class ItemsService {
     }
     item.purchasedBy.push(user);
     const savedItem = await this.itemsRepository.save(item);
+
+    if (ownsOtherVersion) {
+      const inheritedRules = this.formatUrlRules(previousState);
+      let nextState = await this.itemStateRepository.findOne({
+        where: { user: { id: userId }, item: { id: item.id } },
+      });
+      if (!nextState && previousState) {
+        nextState = this.itemStateRepository.create({
+          user,
+          item,
+          isEnabled: previousState.isEnabled,
+          isAutoUpdate: previousState.isAutoUpdate,
+        });
+      }
+      if (nextState) {
+        Object.assign(nextState, inheritedRules);
+        await this.itemStateRepository.save(nextState);
+      }
+    }
 
     // Handle dependencies: grant free ones automatically
     if (item.dependencies && item.dependencies.length > 0) {
@@ -684,7 +795,8 @@ export class ItemsService {
       return {
         ...item,
         isEnabled: state ? state.isEnabled : true,
-        isAutoUpdate: state ? state.isAutoUpdate : true
+        isAutoUpdate: state ? state.isAutoUpdate : true,
+        ...this.formatUrlRules(state),
       };
     });
 
@@ -736,6 +848,9 @@ export class ItemsService {
       });
       
       let storageToMigrate = null;
+      let allowUrlsToMigrate: string[] = [];
+      let blockUrlsToMigrate: string[] = [];
+      let urlRulesToMigrate = false;
 
       for (const v of allVersionsOfProject) {
         if (v.id !== itemId) {
@@ -762,6 +877,9 @@ export class ItemsService {
             if (otherState.storage && Object.keys(otherState.storage).length > 0) {
               storageToMigrate = otherState.storage;
             }
+            allowUrlsToMigrate = this.normalizeUrlRules(otherState.allowUrls);
+            blockUrlsToMigrate = this.normalizeUrlRules(otherState.blockUrls);
+            urlRulesToMigrate = true;
             await this.itemStateRepository.remove(otherState);
           }
         }
@@ -777,12 +895,18 @@ export class ItemsService {
           item,
           isEnabled,
           isAutoUpdate: true,
-          storage: storageToMigrate || {}
+          storage: storageToMigrate || {},
+          allowUrls: allowUrlsToMigrate,
+          blockUrls: blockUrlsToMigrate,
         });
       } else {
         state.isEnabled = isEnabled;
         if (storageToMigrate) {
           state.storage = { ...storageToMigrate, ...(state.storage || {}) };
+        }
+        if (urlRulesToMigrate) {
+          state.allowUrls = allowUrlsToMigrate;
+          state.blockUrls = blockUrlsToMigrate;
         }
       }
 
@@ -982,7 +1106,7 @@ export class ItemsService {
         }
         const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/;
         if (!regex.test(item.code)) {
-          throw new BadRequestException('APP扩展内容前端必须包含 // ==FishPiPlugin== 与 // ==/FishPiPlugin== 元数据');
+          throw new BadRequestException('客户端扩展必须包含 FishPiPlugin 头部');
         }
       } else if (item.type === ItemType.APP_THEME) {
         if (!item.code) {
@@ -991,10 +1115,10 @@ export class ItemsService {
         try {
           const parsed = JSON.parse(item.code);
           if (typeof parsed !== 'object' || parsed === null) {
-            throw new BadRequestException('APP主题内容必须是一个有效的JSON对象');
+            throw new BadRequestException('客户端主题内容必须是 JSON 对象');
           }
         } catch (e: any) {
-          throw new BadRequestException('APP主题内容必须是一个合法的JSON格式: ' + e.message);
+          throw new BadRequestException('客户端主题 JSON 格式错误: ' + e.message);
         }
       }
     }

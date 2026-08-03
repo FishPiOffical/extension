@@ -8,6 +8,7 @@ import 'highlight.js/styles/github-dark.css'
 import message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
+import UrlRulesModal from '@/components/UrlRulesModal.vue'
 
 const { checkDependencies } = useDependencyCheck()
 const route = useRoute()
@@ -19,6 +20,7 @@ const versions = ref<Item[]>([])
 const myPurchases = ref<Item[]>([])
 const loading = ref(true)
 const purchasing = ref(false)
+const showUrlRules = ref(false)
 
 const comments = ref<Comment[]>([])
 const commentContent = ref('')
@@ -414,6 +416,14 @@ onMounted(() => {
                       class="btn btn-primary btn-block rounded-xl h-12">
                 使用此版本
               </button>
+              <button
+                v-if="item.type === 'extension' || item.type === 'theme'"
+                class="btn btn-outline btn-block rounded-xl h-11"
+                @click="showUrlRules = true"
+              >
+                <Icon icon="mdi:web-cog" class="w-4 h-4" />
+                网址设置
+              </button>
               <button v-if="item.code" 
                       @click="copyCode" 
                       class="btn btn-primary btn-outline btn-block rounded-xl h-12">
@@ -429,6 +439,14 @@ onMounted(() => {
                        :checked="item.isEnabled" 
                        @change="toggleEnabled" />
               </div>
+              <button
+                v-if="item.type === 'extension' || item.type === 'theme'"
+                class="btn btn-outline btn-block rounded-xl h-11"
+                @click="showUrlRules = true"
+              >
+                <Icon icon="mdi:web-cog" class="w-4 h-4" />
+                网址设置
+              </button>
               <div v-if="item.isEnabled" class="bg-base-200/50 p-3 rounded-xl flex items-center justify-between">
                 <span class="text-xs font-bold opacity-60">自动更新</span>
                 <input type="checkbox" 
@@ -572,6 +590,14 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <UrlRulesModal
+      v-if="item"
+      :open="showUrlRules"
+      :item-id="item.id"
+      :title="item.name"
+      @close="showUrlRules = false"
+    />
   </div>
 </template>
 

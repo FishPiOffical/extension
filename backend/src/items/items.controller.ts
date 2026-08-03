@@ -61,6 +61,21 @@ export class ItemsController {
     return this.itemsService.getUserPurchases(req.user.userId, type);
   }
 
+  @Get('url-rules')
+  @UseGuards(JwtAuthGuard)
+  async getUserUrlRules(@Request() req) {
+    return this.itemsService.getUserUrlRules(req.user.userId);
+  }
+
+  @Post('url-rules')
+  @UseGuards(JwtAuthGuard)
+  async setUserUrlRules(
+    @Body() body: { allowUrls?: string[]; blockUrls?: string[] },
+    @Request() req,
+  ) {
+    return this.itemsService.setUserUrlRules(req.user.userId, body.allowUrls, body.blockUrls);
+  }
+
   @Get('my-published')
   @UseGuards(JwtAuthGuard)
   async getMyPublished(@Request() req, @Query('type') type?: ItemType) {
@@ -155,17 +170,19 @@ export class ItemsController {
       return;
     }
 
-    const origin = req.query.origin;
-
-    const items = await this.itemsService.getUserPurchases(user.id);
+    const [items, globalUrlRules] = await Promise.all([
+      this.itemsService.getUserPurchases(user.id),
+      this.itemsService.getUserUrlRules(user.id),
+    ]);
     const extensionIds = items.filter(p => p.type === 'extension' && p.isEnabled).map(i => i.id);
     const themeIds = items.filter(p => p.type === 'theme' && p.isEnabled).map(i => i.id);
     const extensionData = items.filter(p => p.isEnabled)
-      .filter(p => !origin || p.matchUrls.some((pattern: string) => new RegExp(pattern.replace(/\*/g, '.*')).test(origin)))
       .map(i => ({ 
         id: i.id, 
         name: i.name, 
         matchUrls: i.matchUrls,
+        allowUrls: i.allowUrls,
+        blockUrls: i.blockUrls,
         identifier: i.identifier,
         dependencies: i.dependencies?.map(d => d.id) || []
       }));
@@ -174,7 +191,8 @@ export class ItemsController {
       .replace(/`{{#Ids}}`/, extensionIds.join(', '))
       .replace(/`{{#Themes}}`/, themeIds.join(', '))
       .replace(/['"`]{{#UserId}}['"`]/, `'${user.id}'`)
-      .replace(/\[`{{#ExtensionData}}`\]/, JSON.stringify(extensionData))
+      .replace(/\[`{{#ExtensionData}}`\]/, () => JSON.stringify(extensionData))
+      .replace(/\[`{{#GlobalUrlRules}}`\]/, () => JSON.stringify(globalUrlRules))
     );
   }
 
@@ -336,6 +354,22 @@ export class ItemsController {
   @UseGuards(JwtAuthGuard)
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
     return this.itemsService.findOne(id, req.user.userId);
+  }
+
+  @Get(':id/url-rules')
+  @UseGuards(JwtAuthGuard)
+  async getItemUrlRules(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    return this.itemsService.getItemUrlRules(id, req.user.userId);
+  }
+
+  @Post(':id/url-rules')
+  @UseGuards(JwtAuthGuard)
+  async setItemUrlRules(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { allowUrls?: string[]; blockUrls?: string[] },
+    @Request() req,
+  ) {
+    return this.itemsService.setItemUrlRules(id, req.user.userId, body.allowUrls, body.blockUrls);
   }
 
   @Get(':id/versions')

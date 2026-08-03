@@ -189,7 +189,7 @@ onMounted(() => {
             @click="activeTab = 'app-theme'" 
             class="btn btn-sm join-item px-4"
             :class="activeTab === 'app-theme' ? 'btn-primary shadow-sm' : 'btn-soft opacity-60'"
-          >APP主题</button>
+          >客户端主题</button>
         </div>
       </div>
     </header>
