@@ -78,7 +78,7 @@ const logout = () => {
             <li>
               <RouterLink to="/app-upload" class="flex items-center gap-2 py-2.5 px-3">
                 <Icon icon="mdi:cellphone" class="text-base text-secondary" />
-                <span>APP扩展与主题</span>
+                <span>客户端扩展与主题</span>
               </RouterLink>
             </li>
           </ul>

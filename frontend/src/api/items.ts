@@ -4,8 +4,8 @@ import request from '../utils/request'
 export const ItemTypeLabels: any = {
   'extension': '扩展',
   'theme': '主题',
-  'app-extension': 'APP扩展',
-  'app-theme': 'APP主题',
+  'app-extension': '客户端扩展',
+  'app-theme': '客户端主题',
 };
 
 export interface Item {
@@ -30,9 +30,16 @@ export interface Item {
   isEnabled?: boolean
   isAutoUpdate?: boolean
   matchUrls?: string[]
+  allowUrls?: string[]
+  blockUrls?: string[]
   upgradeFrom?: Item | number
   upgradeFromId?: number
   dependencies?: Item[]
+}
+
+export interface UrlRules {
+  allowUrls: string[]
+  blockUrls: string[]
 }
 
 export interface Comment {
@@ -111,6 +118,22 @@ export function getMyPublishedItems() {
  */
 export function getPurchasedItems() {
   return request.get<Item[]>('/items/my-purchases')
+}
+
+export function getUserUrlRules() {
+  return request.get<UrlRules>('/items/url-rules')
+}
+
+export function setUserUrlRules(rules: UrlRules) {
+  return request.post<UrlRules>('/items/url-rules', rules)
+}
+
+export function getItemUrlRules(id: number) {
+  return request.get<UrlRules>(`/items/${id}/url-rules`)
+}
+
+export function setItemUrlRules(id: number, rules: UrlRules) {
+  return request.post<UrlRules>(`/items/${id}/url-rules`, rules)
 }
 
 /**

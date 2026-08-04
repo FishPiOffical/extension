@@ -4,13 +4,14 @@ import { Item } from './item.entity';
 import { UserItemState } from './user-item-state.entity';
 import { Comment } from './comment.entity';
 import { GlobalStorage } from './global-storage.entity';
+import { UserUrlRule } from './user-url-rule.entity';
 import { ItemsService } from './items.service';
 import { ItemsController } from './items.controller';
 import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Item, UserItemState, Comment, GlobalStorage]),
+    TypeOrmModule.forFeature([Item, UserItemState, UserUrlRule, Comment, GlobalStorage]),
     forwardRef(() => UsersModule),
   ],
   providers: [ItemsService],

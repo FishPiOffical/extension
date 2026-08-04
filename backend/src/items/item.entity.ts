@@ -19,8 +19,8 @@ export enum ItemStatus {
 export const ItemTypeLabels = {
   [ItemType.EXTENSION]: '扩展',
   [ItemType.THEME]: '主题',
-  [ItemType.APP_EXTENSION]: 'APP扩展',
-  [ItemType.APP_THEME]: 'APP主题',
+  [ItemType.APP_EXTENSION]: '客户端扩展',
+  [ItemType.APP_THEME]: '客户端主题',
 };
 
 @Entity()
