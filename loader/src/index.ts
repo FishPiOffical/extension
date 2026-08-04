@@ -2,6 +2,7 @@ import Fishpi from 'fishpi/browser';
 import * as GM from './gm';
 import * as msgbox from './msgbox';
 import { isUrlAllowed } from './url-rules';
+import { setupMarketShortcuts } from './market-shortcuts';
 const defaultAllowGlobals = [
   'crypto',
   'console',
@@ -125,6 +126,9 @@ async function activate() {
   if (location.host.includes('fishpi.cn')) {
     const { apiKey } = await fetch('/getApiKeyInWeb').then((r) => r.json())
     token = apiKey;
+  }
+  if (location.hostname === 'fishpi.cn') {
+    setupMarketShortcuts({ apiKey: token, apiOrigin: scriptSrc.origin });
   }
   newWindow.location = {
     ...readOnly(clone(location, window), ['href', 'protocol', 'host', 'hostname', 'port', 'pathname', 'search', 'hash']),
