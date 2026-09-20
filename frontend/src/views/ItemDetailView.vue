@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getItemById, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, setAutoUpdate, type Item, getComments, addComment, blockComment, type Comment, reportComment, updateIdentifier } from '@/api/items'
+import { getItemById, getItemByIdentifier, purchaseItem, toggleItemState, getItemVersions, getPurchasedItems, setAutoUpdate, type Item, getComments, addComment, blockComment, type Comment, reportComment, updateIdentifier } from '@/api/items'
 import { useAuthStore } from '@/stores/auth'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
+import { itemDetailPath } from '@/utils/itemPath'
 
 const { checkDependencies } = useDependencyCheck()
 const route = useRoute()
@@ -25,21 +26,39 @@ const commentContent = ref('')
 const replyingTo = ref<Comment | null>(null)
 const sendingComment = ref(false)
 
+// 支持两种入口：/item/:id 与 /ext/:identifier(/:version)
+const routeIdentifier = computed(() => {
+  const value = route.params.identifier
+  return typeof value === 'string' && value.length > 0 ? value : null
+})
+
+// 切换版本时同样按 identifier 选择路由
+const detailPath = (versionItem: Item) => itemDetailPath(versionItem)
+
 const loadItem = async () => {
   loading.value = true
   try {
-    const id = parseInt(route.params.id as string)
-    const [itemRes, versionsRes, purchasesRes, commentsRes] = await Promise.all([
-      getItemById(id),
-      getItemVersions(id),
+    let itemRes: { data: Item }
+
+    if (routeIdentifier.value) {
+      const versionParam = route.params.version ? String(route.params.version) : undefined
+      itemRes = await getItemByIdentifier(routeIdentifier.value, versionParam)
+    } else {
+      itemRes = await getItemById(parseInt(route.params.id as string))
+    }
+
+    const resolvedId = itemRes.data.id
+    const [versionsRes, purchasesRes, commentsRes] = await Promise.all([
+      getItemVersions(resolvedId),
       authStore.isAuthenticated ? getPurchasedItems() : Promise.resolve({ data: [] }),
-      getComments(id)
+      getComments(resolvedId)
     ])
     item.value = itemRes.data
     versions.value = versionsRes.data
     myPurchases.value = (purchasesRes as any).data || []
     comments.value = commentsRes.data
   } catch (error) {
+    item.value = null
     console.error('Failed to load item:', error)
     message.error('加载作品详情失败')
   } finally {
@@ -97,8 +116,8 @@ const doReportComment = async (id: number) => {
 }
 
 // Watch for route changes (when switching versions via same component)
-watch(() => route.params.id, (newId) => {
-  if (newId) {
+watch(() => [route.params.id, route.params.identifier, route.params.version], () => {
+  if (route.params.id || route.params.identifier) {
     loadItem()
   }
 })
@@ -308,7 +327,7 @@ onMounted(() => {
                 </label>
                 <ul tabindex="0" class="dropdown-content z-1 menu p-2 shadow-2xl bg-base-200 rounded-2xl w-32 mt-2 border border-base-300">
                   <li v-for="v in versions" :key="v.id">
-                    <a @click="router.push(`/item/${v.id}`)" 
+                    <a @click="router.push(detailPath(v))" 
                        class="rounded-xl font-bold py-2"
                        :class="v.id === item.id ? 'bg-primary text-primary-content' : 'hover:bg-primary/20'">
                       v{{ v.version || 1 }}
@@ -332,7 +351,7 @@ onMounted(() => {
 
             <div v-if="item.dependencies && item.dependencies.length > 0" class="flex flex-wrap items-center gap-2">
               <span class="text-xs font-black uppercase tracking-widest opacity-40">依赖作品:</span>
-              <router-link v-for="dep in item.dependencies" :key="dep.id" :to="`/item/${dep.id}`" 
+              <router-link v-for="dep in item.dependencies" :key="dep.id" :to="itemDetailPath(dep)" 
                            class="badge badge-sm badge-primary badge-outline hover:bg-primary hover:text-primary-content transition-all font-bold">
                 {{ dep.name }} (v{{ dep.version }})
               </router-link>

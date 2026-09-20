@@ -121,6 +121,17 @@ export function getItemById(id: number) {
 }
 
 /**
+ * Get item by project identifier, optionally pinning a version
+ */
+export function getItemByIdentifier(identifier: string, version?: number | string) {
+  const encoded = encodeURIComponent(identifier)
+  if (version === undefined || version === null || version === '') {
+    return request.get<Item>(`/items/ext/${encoded}`)
+  }
+  return request.get<Item>(`/items/ext/${encoded}/${version}`)
+}
+
+/**
  * Get all versions of an item
  */
 export function getItemVersions(id: number) {

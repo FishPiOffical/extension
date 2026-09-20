@@ -78,6 +78,23 @@ export class ItemsController {
     return this.itemsService.findByAuthor(username);
   }
 
+  // 按项目标识符访问详情，需声明在 :id 系列路由之前
+  @Get('ext/:identifier')
+  @UseGuards(JwtAuthGuard)
+  async getByIdentifier(@Param('identifier') identifier: string, @Request() req) {
+    return this.itemsService.findOneByIdentifier(identifier, undefined, req.user?.userId);
+  }
+
+  @Get('ext/:identifier/:version')
+  @UseGuards(JwtAuthGuard)
+  async getByIdentifierVersion(
+    @Param('identifier') identifier: string,
+    @Param('version', ParseIntPipe) version: number,
+    @Request() req,
+  ) {
+    return this.itemsService.findOneByIdentifier(identifier, version, req.user?.userId);
+  }
+
   @Get(':id.js')
   async getItemCode(@Param('id') id: number, @Query('userId') userId: string, @Res() res) {
     res.setHeader('Access-Control-Allow-Origin', '*');

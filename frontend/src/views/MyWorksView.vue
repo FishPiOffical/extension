@@ -7,6 +7,7 @@ import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import DevDocsModal from '@/components/docs/DevDocsModal.vue'
 import { useDependencyCheck } from '@/utils/hooks'
+import { itemDetailPath } from '@/utils/itemPath'
 
 const devDocsRef = ref<InstanceType<typeof DevDocsModal> | null>(null)
 
@@ -324,7 +325,7 @@ onMounted(() => {
                               :class="isUsing(item.id) ? 'btn-error' : 'btn-success'">
                          {{ isUsing(item.id) ? '停用' : '使用' }}
                       </button>
-                      <button v-if="item.status === 'approved'" @click="router.push(`/item/${item.id}`)" class="btn btn-xs btn-ghost bg-base-100 flex-1">详情</button>
+                      <button v-if="item.status === 'approved'" @click="router.push(itemDetailPath(item))" class="btn btn-xs btn-ghost bg-base-100 flex-1">详情</button>
                       <button v-if="item.status === 'draft'" @click="editWork(item)" class="btn btn-xs btn-primary flex-1">编辑</button>
                       <button v-if="item.status === 'draft'" @click="handlePublish(item.id)" class="btn btn-xs btn-success flex-1">发布</button>
                       <button v-if="item.status === 'draft'" @click="handleDelete(item.id)" class="btn btn-xs btn-error btn-outline flex-1">删除</button>
@@ -361,7 +362,7 @@ onMounted(() => {
                                :class="isUsing(item.id) ? 'btn-error' : 'btn-success'">
                          {{ isUsing(item.id) ? '停用' : '使用' }}
                        </button>
-                       <button v-if="item.status === 'approved'" @click="router.push(`/item/${item.id}`)" class="btn btn-xs btn-ghost bg-base-100 flex-1">详情</button>
+                       <button v-if="item.status === 'approved'" @click="router.push(itemDetailPath(item))" class="btn btn-xs btn-ghost bg-base-100 flex-1">详情</button>
                      </div>
                    </div>
                  </div>

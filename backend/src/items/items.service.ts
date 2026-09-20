@@ -718,13 +718,8 @@ export class ItemsService {
     return this.commentRepository.save(comment);
   }
 
-  async findOne(id: number, userId?: string): Promise<any> {
-    const { code, project } = await this.resolveCodeByAnyId(id, ItemStatus.APPROVED);
-
-    if (code.status !== ItemStatus.APPROVED && project.authorId !== userId) {
-      throw new ForbiddenException('Item not approved');
-    }
-
+  // 组装单个版本详情响应，供 id 与 identifier 两种入口复用
+  private async buildDetailPayload(code: ItemCode, project: Item, userId?: string): Promise<any> {
     const [view] = await this.buildItemViewsFromCodes([code], {
       includeCode: true,
       includeDependencies: true,
@@ -749,6 +744,49 @@ export class ItemsService {
     }
 
     return { ...view, isEnabled, isAutoUpdate, isPurchased, purchaseCount };
+  }
+
+  async findOne(id: number, userId?: string): Promise<any> {
+    const { code, project } = await this.resolveCodeByAnyId(id, ItemStatus.APPROVED);
+
+    if (code.status !== ItemStatus.APPROVED && project.authorId !== userId) {
+      throw new ForbiddenException('Item not approved');
+    }
+
+    return this.buildDetailPayload(code, project, userId);
+  }
+
+  // 按项目标识符读取详情，version 省略时取最新的已审核版本
+  async findOneByIdentifier(identifier: string, version?: number, userId?: string): Promise<any> {
+    if (!identifier) {
+      throw new NotFoundException('没找到');
+    }
+
+    const project = await this.itemsRepository.findOne({ where: { identifier } });
+    if (!project) {
+      throw new NotFoundException('没找到');
+    }
+
+    let code: ItemCode | null = null;
+
+    if (version !== undefined && version !== null && !Number.isNaN(version)) {
+      code = await this.itemCodeRepository.findOne({ where: { itemId: project.id, version } });
+    } else {
+      code = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
+      if (!code) {
+        code = await this.getLatestCodeForProject(project.id);
+      }
+    }
+
+    if (!code) {
+      throw new NotFoundException('找不到版本');
+    }
+
+    if (code.status !== ItemStatus.APPROVED && project.authorId !== userId) {
+      throw new ForbiddenException('Item not approved');
+    }
+
+    return this.buildDetailPayload(code, project, userId);
   }
 
   async getRecursiveDependencies(itemId: number): Promise<any[]> {

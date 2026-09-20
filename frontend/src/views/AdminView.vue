@@ -5,6 +5,7 @@ import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import Message from '@/components/msg'
 import { CodeDiff } from 'v-code-diff'
+import { itemDetailPath } from '@/utils/itemPath'
 
 const items = ref<any[]>([])
 const reportedComments = ref<Comment[]>([])
@@ -184,7 +185,7 @@ onMounted(() => {
           </div>
           <div v-if="comment.item" class="flex items-center gap-2 text-[10px]">
             <span class="opacity-40 uppercase font-black tracking-widest">来自作品:</span>
-            <router-link :to="`/item/${comment.item.id}`" class="link link-primary font-black">{{ comment.item.name }}</router-link>
+            <router-link :to="itemDetailPath(comment.item)" class="link link-primary font-black">{{ comment.item.name }}</router-link>
           </div>
         </div>
         

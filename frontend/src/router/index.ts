@@ -27,6 +27,16 @@ const router = createRouter({
           component: () => import('../views/ItemDetailView.vue'),
         },
         {
+          path: 'ext/:identifier',
+          name: 'item-detail-identifier',
+          component: () => import('../views/ItemDetailView.vue'),
+        },
+        {
+          path: 'ext/:identifier/:version',
+          name: 'item-detail-identifier-version',
+          component: () => import('../views/ItemDetailView.vue'),
+        },
+        {
           path: 'my-works',
           name: 'my-works',
           component: () => import('../views/MyWorksView.vue'),

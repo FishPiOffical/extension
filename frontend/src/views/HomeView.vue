@@ -6,6 +6,7 @@ import { getItems, purchaseItem, getPurchasedItems, ItemTypeLabels } from '@/api
 import Message from '@/components/msg'
 import MessageBox from '@/components/msgbox'
 import { useDependencyCheck } from '@/utils/hooks'
+import { itemDetailPath } from '@/utils/itemPath'
 
 const { checkDependencies } = useDependencyCheck()
 const router = useRouter()
@@ -207,7 +208,7 @@ onMounted(() => {
     <!-- Items Grid -->
     <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       <div v-for="item in filteredItems" :key="item.id" 
-        @click="router.push(`/item/${item.id}`)"
+        @click="router.push(itemDetailPath(item))"
         class="group bg-base-200 border border-base-200 rounded-xl hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 flex flex-col p-5 cursor-pointer">
         
         <div class="flex items-start gap-4 mb-4">
