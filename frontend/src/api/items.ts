@@ -13,7 +13,7 @@ export interface Item {
   name: string
   description: string
   type: 'extension' | 'theme' | 'app-extension' | 'app-theme'
-  code: string
+  code?: string
   language: string
   status: 'draft' | 'pending' | 'approved' | 'rejected'
   price: number

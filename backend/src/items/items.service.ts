@@ -1,6 +1,14 @@
-import { Injectable, NotFoundException, UnauthorizedException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, IsNull, Repository } from 'typeorm';
+import { In, IsNull, MoreThan, Repository } from 'typeorm';
 import { promisify } from 'util';
 import { gzip, gunzip } from 'zlib';
 import * as fsp from 'fs/promises';
@@ -9,32 +17,57 @@ import { Item, ItemStatus, ItemType, ItemTypeLabels } from './item.entity';
 import { Comment } from './comment.entity';
 import { UserItemState } from './user-item-state.entity';
 import { GlobalStorage } from './global-storage.entity';
+import { ItemCode } from './item-code.entity';
+import { ItemDependency } from './item-dependency.entity';
+import { ItemPurchase } from './item-purchase.entity';
+import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
-import Fishpi, { FingerTo } from 'fishpi';
+import { FingerTo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
+
+type ViewBuildOptions = {
+  includeCode?: boolean;
+  includeDependencies?: boolean;
+  includeUpgradeFrom?: boolean;
+};
 
 @Injectable()
 export class ItemsService {
   constructor(
     @InjectRepository(Item)
     private itemsRepository: Repository<Item>,
+    @InjectRepository(ItemCode)
+    private itemCodeRepository: Repository<ItemCode>,
+    @InjectRepository(ItemDependency)
+    private itemDependencyRepository: Repository<ItemDependency>,
+    @InjectRepository(ItemPurchase)
+    private itemPurchaseRepository: Repository<ItemPurchase>,
     @InjectRepository(UserItemState)
     private itemStateRepository: Repository<UserItemState>,
     @InjectRepository(Comment)
     private commentRepository: Repository<Comment>,
     @InjectRepository(GlobalStorage)
     private globalStorageRepository: Repository<GlobalStorage>,
+    @InjectRepository(User)
+    private usersRepository: Repository<User>,
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
   ) {}
 
-  private readonly approvedItemsCache = new Map<number, Item>();
+  private readonly approvedItemsCache = new Map<number, any>();
   private readonly CACHE_DIR = path.join(process.cwd(), 'cache', 'items');
-
   private readonly gzipAsync = promisify(gzip);
   private readonly gunzipAsync = promisify(gunzip);
 
-  private async writeApprovedItemCache(item: Item): Promise<void> {
+  private uniqueNumberIds(ids: number[]): number[] {
+    return Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)));
+  }
+
+  private uniqueStringIds(ids: string[]): string[] {
+    return Array.from(new Set(ids.filter(Boolean)));
+  }
+
+  private async writeApprovedItemCache(item: any): Promise<void> {
     try {
       await fsp.mkdir(this.CACHE_DIR, { recursive: true });
       const compressed = await this.gzipAsync(JSON.stringify(item));
@@ -44,115 +77,434 @@ export class ItemsService {
     }
   }
 
-  public async findApprovedItemById(id: number): Promise<Item | null> {
-    // 1. 内存缓存
-    const cached = this.approvedItemsCache.get(id);
-    if (cached) return cached;
+  private async getLatestCodeForProject(itemId: number, status?: ItemStatus): Promise<ItemCode | null> {
+    const where: any = { itemId };
+    if (status) {
+      where.status = status;
+    }
+    const rows = await this.itemCodeRepository.find({
+      where,
+      order: { version: 'DESC', createdAt: 'DESC' },
+      take: 1,
+    });
+    return rows[0] || null;
+  }
 
-    // 2. 文件缓存
+  private async getLatestCodeMapByProjectIds(itemIds: number[], status?: ItemStatus): Promise<Map<number, ItemCode>> {
+    const projectIds = this.uniqueNumberIds(itemIds);
+    const out = new Map<number, ItemCode>();
+    if (projectIds.length === 0) {
+      return out;
+    }
+
+    const qb = this.itemCodeRepository.createQueryBuilder('code')
+      .where('code.itemId IN (:...projectIds)', { projectIds })
+      .orderBy('code.itemId', 'ASC')
+      .addOrderBy('code.version', 'DESC')
+      .addOrderBy('code.createdAt', 'DESC');
+
+    if (status) {
+      qb.andWhere('code.status = :status', { status });
+    }
+
+    const rows = await qb.getMany();
+    for (const row of rows) {
+      if (!out.has(row.itemId)) {
+        out.set(row.itemId, row);
+      }
+    }
+    return out;
+  }
+
+  private async resolveProjectByAnyId(id: number): Promise<Item> {
+    const code = await this.itemCodeRepository.findOne({ where: { id } });
+    if (code) {
+      const project = await this.itemsRepository.findOne({ where: { id: code.itemId } });
+      if (!project) {
+        throw new NotFoundException('找不到项目');
+      }
+      return project;
+    }
+
+    const project = await this.itemsRepository.findOne({ where: { id } });
+    if (!project) {
+      throw new NotFoundException('找不到项目');
+    }
+    return project;
+  }
+
+  private async resolveCodeByAnyId(id: number, preferredStatus?: ItemStatus): Promise<{ code: ItemCode; project: Item }> {
+    let code = await this.itemCodeRepository.findOne({ where: { id } });
+
+    if (!code) {
+      const project = await this.itemsRepository.findOne({ where: { id } });
+      if (!project) {
+        throw new NotFoundException('找不到项目');
+      }
+
+      code = await this.getLatestCodeForProject(project.id, preferredStatus);
+      if (!code && preferredStatus) {
+        code = await this.getLatestCodeForProject(project.id);
+      }
+      if (!code) {
+        throw new NotFoundException('找不到版本');
+      }
+      return { code, project };
+    }
+
+    const project = await this.itemsRepository.findOne({ where: { id: code.itemId } });
+    if (!project) {
+      throw new NotFoundException('找不到项目');
+    }
+
+    return { code, project };
+  }
+
+  private async resolveCodeForOperation(id: number, allowed: ItemStatus[]): Promise<{ code: ItemCode; project: Item }> {
+    const direct = await this.itemCodeRepository.findOne({ where: { id } });
+    if (direct && allowed.includes(direct.status)) {
+      const project = await this.itemsRepository.findOne({ where: { id: direct.itemId } });
+      if (!project) {
+        throw new NotFoundException('找不到项目');
+      }
+      return { code: direct, project };
+    }
+
+    const project = await this.itemsRepository.findOne({ where: { id } });
+    if (!project) {
+      throw new NotFoundException('找不到项目');
+    }
+
+    const rows = await this.itemCodeRepository.find({
+      where: { itemId: project.id, status: In(allowed) as any },
+      order: { version: 'DESC', createdAt: 'DESC' },
+      take: 1,
+    });
+    const code = rows[0];
+    if (!code) {
+      throw new NotFoundException('找不到版本');
+    }
+
+    return { code, project };
+  }
+
+  private async hasProjectPurchase(itemId: number, userId: string): Promise<boolean> {
+    return (await this.itemPurchaseRepository.count({ where: { itemId, userId } })) > 0;
+  }
+
+  private async ensureProjectPurchase(itemId: number, userId: string): Promise<void> {
+    if (!(await this.hasProjectPurchase(itemId, userId))) {
+      await this.itemPurchaseRepository.save(this.itemPurchaseRepository.create({ itemId, userId }));
+    }
+  }
+
+  private async replaceDependencies(projectId: number, dependencyProjectIds: number[] = []): Promise<void> {
+    await this.itemDependencyRepository.delete({ itemId: projectId });
+    const depIds = this.uniqueNumberIds(dependencyProjectIds).filter((id) => id !== projectId);
+    if (depIds.length === 0) {
+      return;
+    }
+
+    const deps = await this.itemsRepository.find({ where: { id: In(depIds) } });
+    await this.itemDependencyRepository.save(
+      deps.map((dep) => this.itemDependencyRepository.create({ itemId: projectId, dependencyItemId: dep.id })),
+    );
+  }
+
+  private async buildItemViewsFromCodes(codes: ItemCode[], options: ViewBuildOptions = {}): Promise<any[]> {
+    if (!codes || codes.length === 0) {
+      return [];
+    }
+
+    const includeCode = options.includeCode ?? false;
+    const includeDependencies = options.includeDependencies ?? true;
+    const includeUpgradeFrom = options.includeUpgradeFrom ?? true;
+
+    const projectIds = this.uniqueNumberIds(codes.map((code) => code.itemId));
+    const projects = await this.itemsRepository.find({ where: { id: In(projectIds) } });
+    const projectMap = new Map(projects.map((project) => [project.id, project]));
+
+    const authorIds = this.uniqueStringIds(projects.map((project) => project.authorId));
+    const authors = authorIds.length > 0
+      ? await this.usersRepository.find({ where: { id: In(authorIds) } })
+      : [];
+    const authorMap = new Map(authors.map((author) => [author.id, author]));
+
+    const dependencyMap = new Map<number, any[]>();
+    if (includeDependencies) {
+      const links = await this.itemDependencyRepository.find({ where: { itemId: In(projectIds) } });
+      const depProjectIds = this.uniqueNumberIds(links.map((link) => link.dependencyItemId));
+      const depCodeMap = await this.getLatestCodeMapByProjectIds(depProjectIds, ItemStatus.APPROVED);
+      const depCodes = Array.from(depCodeMap.values());
+      const depViews = await this.buildItemViewsFromCodes(depCodes, {
+        includeCode: false,
+        includeDependencies: false,
+        includeUpgradeFrom: false,
+      });
+      const depViewMap = new Map<number, any>();
+      depViews.forEach((depView) => {
+        depViewMap.set(depView.projectId, depView);
+      });
+
+      links.forEach((link) => {
+        const depView = depViewMap.get(link.dependencyItemId);
+        if (!depView) {
+          return;
+        }
+        if (!dependencyMap.has(link.itemId)) {
+          dependencyMap.set(link.itemId, []);
+        }
+        dependencyMap.get(link.itemId).push(depView);
+      });
+    }
+
+    const upgradeMap = new Map<number, any>();
+    if (includeUpgradeFrom) {
+      const parentCodeIds = this.uniqueNumberIds(codes.map((code) => code.upgradeFromCodeId).filter(Boolean));
+      if (parentCodeIds.length > 0) {
+        const parentCodes = await this.itemCodeRepository.find({ where: { id: In(parentCodeIds) } });
+        const parentViews = await this.buildItemViewsFromCodes(parentCodes, {
+          includeCode,
+          includeDependencies: false,
+          includeUpgradeFrom: false,
+        });
+        parentViews.forEach((view) => {
+          upgradeMap.set(view.id, view);
+        });
+      }
+    }
+
+    const views = codes
+      .map((code) => {
+        const project = projectMap.get(code.itemId);
+        if (!project) {
+          return null;
+        }
+
+        const view: any = {
+          id: code.id,
+          projectId: project.id,
+          name: project.name,
+          description: project.description,
+          type: project.type,
+          price: project.price,
+          identifier: project.identifier,
+          authorId: project.authorId,
+          author: authorMap.get(project.authorId) || null,
+          language: code.language,
+          status: code.status,
+          version: code.version,
+          matchUrls: code.matchUrls,
+          reviewComment: code.reviewComment,
+          upgradeFromId: code.upgradeFromCodeId || null,
+          createdAt: code.createdAt,
+          code: includeCode ? code.code : undefined,
+          dependencies: includeDependencies ? (dependencyMap.get(project.id) || []) : [],
+          upgradeFrom: includeUpgradeFrom ? (upgradeMap.get(code.upgradeFromCodeId) || null) : null,
+        };
+
+        return view;
+      })
+      .filter(Boolean);
+
+    return views;
+  }
+
+  private validateCodeByType(type: ItemType, code: string): void {
+    if (type === ItemType.APP_EXTENSION) {
+      if (!code) {
+        throw new BadRequestException('代码不能为空');
+      }
+      const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/;
+      if (!regex.test(code)) {
+        throw new BadRequestException('APP扩展内容前端必须包含 // ==FishPiPlugin== 与 // ==/FishPiPlugin== 元数据');
+      }
+      return;
+    }
+
+    if (type === ItemType.APP_THEME) {
+      if (!code) {
+        throw new BadRequestException('配置内容不能为空');
+      }
+      try {
+        const parsed = JSON.parse(code);
+        if (typeof parsed !== 'object' || parsed === null) {
+          throw new BadRequestException('APP主题内容必须是一个有效的JSON对象');
+        }
+      } catch (e: any) {
+        throw new BadRequestException('APP主题内容必须是一个合法的JSON格式: ' + e.message);
+      }
+      return;
+    }
+
+    if (!code) {
+      throw new BadRequestException('代码不能为空');
+    }
+  }
+
+  private async sendPublishNotice(itemView: any): Promise<void> {
+    if (itemView.status !== ItemStatus.PENDING) {
+      return;
+    }
+
+    const config = ConfigService.getConfig();
+    if (!config?.noticeGoldenKey || !config?.noticeUsers) {
+      return;
+    }
+
+    const noticeFinger = FingerTo(config.noticeGoldenKey);
+    config.noticeUsers.split(',').forEach((username) => {
+      noticeFinger.sendNotice(
+        username.trim(),
+        `用户${itemView.author?.username}发布了新的${ItemTypeLabels[itemView.type]}《${itemView.name}》[待审核](https://ext.adventext.fun/admin)`,
+      );
+    });
+  }
+
+  public async findApprovedItemById(id: number): Promise<any | null> {
+    const cached = this.approvedItemsCache.get(id);
+    if (cached?.code !== undefined) {
+      return cached;
+    }
+
     try {
       const compressed = await fsp.readFile(path.join(this.CACHE_DIR, `${id}.json.gz`));
       const decompressed = await this.gunzipAsync(compressed);
-      const item = JSON.parse(decompressed.toString('utf-8')) as Item;
-      this.approvedItemsCache.set(id, item);
-      return item;
+      const item = JSON.parse(decompressed.toString('utf-8'));
+      if (item?.code !== undefined) {
+        this.approvedItemsCache.set(id, item);
+        return item;
+      }
     } catch {
-      // 文件不存在或损坏，由调用方查数据库
+      // cache miss
     }
 
-    // 缓存中没有（待审核或草稿），直接查数据库
-    const item = await this.itemsRepository.findOne({
-      where: { id },
-      relations: ['author', 'dependencies'],
+    let code = await this.itemCodeRepository.findOne({ where: { id } });
+    if (!code) {
+      const project = await this.itemsRepository.findOne({ where: { id } });
+      if (!project) {
+        return null;
+      }
+      code = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
+    }
+
+    if (!code) {
+      return null;
+    }
+
+    const [view] = await this.buildItemViewsFromCodes([code], {
+      includeCode: true,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
     });
-    // 若从数据库取到的是已审核项目，回填缓存
-    if (item?.status === ItemStatus.APPROVED) {
-      this.approvedItemsCache.set(item.id, item);
-      this.writeApprovedItemCache(item);
+
+    if (!view) {
+      return null;
     }
 
-    return item;
+    if (view.status === ItemStatus.APPROVED) {
+      this.approvedItemsCache.set(view.id, view);
+      this.writeApprovedItemCache(view);
+    }
+
+    return view;
   }
 
-  async create(data: Partial<Item>, authorId: string, upgradeFromId?: number, isDraft: boolean = false, dependencyIds?: number[]): Promise<Item> {
-    if (data.type === ItemType.APP_EXTENSION || data.type === ItemType.APP_THEME) {
-      data.matchUrls = null;
-      if (data.type === ItemType.APP_EXTENSION) {
-        if (!data.code) {
-          throw new BadRequestException('代码不能为空');
-        }
-        const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/;
-        if (!regex.test(data.code)) {
-          throw new BadRequestException('APP扩展内容前端必须包含 // ==FishPiPlugin== 与 // ==/FishPiPlugin== 元数据');
-        }
-      } else if (data.type === ItemType.APP_THEME) {
-        if (!data.code) {
-          throw new BadRequestException('配置内容不能为空');
-        }
-        try {
-          const parsed = JSON.parse(data.code);
-          if (typeof parsed !== 'object' || parsed === null) {
-            throw new BadRequestException('APP主题内容必须是一个有效的JSON对象');
-          }
-        } catch (e: any) {
-          throw new BadRequestException('APP主题内容必须是一个合法的JSON格式: ' + e.message);
-        }
-      }
-    }
+  async create(
+    data: Partial<Item>,
+    authorId: string,
+    upgradeFromId?: number,
+    isDraft: boolean = false,
+    dependencyIds?: number[],
+  ): Promise<any> {
+    const versionCode = (data as any).code || '';
+    const versionLanguage = (data as any).language;
+    const versionMatchUrls = (data as any).matchUrls;
+
+    this.validateCodeByType(data.type, versionCode);
 
     const author = await this.usersService.findById(authorId);
-    
-    let version = 1;
-    let upgradeFrom = null;
+    if (!author) {
+      throw new NotFoundException('找不到此用户');
+    }
+
+    let project: Item;
+    let fromCode: ItemCode | null = null;
+    let nextVersion = 1;
+
     if (upgradeFromId) {
-      const originalItem = await this.itemsRepository.findOne({ 
-        where: { id: upgradeFromId },
-        relations: ['author'] 
-      });
-      
-      if (!originalItem) {
-        throw new NotFoundException('找不到要升级的项目');
-      }
-      
-      if (originalItem.author.id !== authorId) {
-         throw new UnauthorizedException('无权升级此项目');
+      const resolved = await this.resolveCodeByAnyId(upgradeFromId);
+      fromCode = resolved.code;
+      project = resolved.project;
+
+      if (project.authorId !== authorId) {
+        throw new UnauthorizedException('无权升级此项目');
       }
 
-      // Check if there is already a pending or draft upgrade for this item
-      const existingUpgrade = await this.itemsRepository.findOne({
+      const existing = await this.itemCodeRepository.findOne({
         where: [
-          { upgradeFrom: { id: upgradeFromId }, status: ItemStatus.PENDING },
-          { upgradeFrom: { id: upgradeFromId }, status: ItemStatus.DRAFT },
-        ]
+          { itemId: project.id, status: ItemStatus.PENDING },
+          { itemId: project.id, status: ItemStatus.DRAFT },
+        ],
       });
-
-      if (existingUpgrade) {
+      if (existing) {
         throw new BadRequestException('该作品已有正在进行的升级或草稿');
       }
 
-      version = originalItem.version + 1;
-      upgradeFrom = originalItem;
-      // Use the identifier from the original item, ignore any new identifier provided during upgrade
-      data.identifier = originalItem.identifier;
-    }
+      nextVersion = (fromCode.version || 0) + 1;
 
-    let dependencies = [];
-    if (dependencyIds && dependencyIds.length > 0 && data.type !== ItemType.APP_EXTENSION && data.type !== ItemType.APP_THEME) {
-      dependencies = await this.itemsRepository.find({
-        where: dependencyIds.map(id => ({ id }))
+      project.name = data.name;
+      project.description = data.description;
+      project.type = data.type;
+      project.price = data.price ?? 0;
+    } else {
+      project = this.itemsRepository.create({
+        name: data.name,
+        description: data.description,
+        type: data.type,
+        price: data.price ?? 0,
+        authorId,
+        identifier: data.identifier || null,
       });
     }
 
-    const item = this.itemsRepository.create({
-      ...data,
-      author,
-      version,
-      upgradeFrom,
-      dependencies,
+    if (project.identifier && data.identifier && project.identifier !== data.identifier) {
+      throw new BadRequestException('一旦设定，标识符不可修改');
+    }
+
+    if (!project.identifier && data.identifier) {
+      project.identifier = data.identifier;
+    }
+
+    const savedProject = await this.itemsRepository.save(project);
+
+    const codeRow = this.itemCodeRepository.create({
+      itemId: savedProject.id,
+      version: nextVersion,
+      language: versionLanguage,
       status: isDraft ? ItemStatus.DRAFT : ItemStatus.PENDING,
+      matchUrls: data.type === ItemType.APP_EXTENSION || data.type === ItemType.APP_THEME ? null : versionMatchUrls,
+      code: versionCode,
+      reviewComment: null,
+      upgradeFromCodeId: fromCode?.id || null,
     });
-    this.sendPublishNotice(item);
-    return this.itemsRepository.save(item);
+
+    const savedCode = await this.itemCodeRepository.save(codeRow);
+
+    if (data.type === ItemType.APP_EXTENSION || data.type === ItemType.APP_THEME) {
+      await this.replaceDependencies(savedProject.id, []);
+    } else if (dependencyIds) {
+      await this.replaceDependencies(savedProject.id, dependencyIds);
+    }
+
+    const [view] = await this.buildItemViewsFromCodes([savedCode], {
+      includeCode: true,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+
+    await this.sendPublishNotice(view);
+    return view;
   }
 
   async findAll(
@@ -161,127 +513,147 @@ export class ItemsService {
     type?: ItemType,
     page?: number,
     limit?: number,
-  ): Promise<{ items: Item[]; total: number }> {
-    const query = this.itemsRepository.createQueryBuilder('item')
-      .leftJoinAndSelect('item.author', 'author');
-      // 移除不必要的关联查询以提升性能：
-      // - purchasedBy：列表页不需要购买用户信息
-      // - upgradeFrom：列表页不需要升级来源
-      // - dependencies：列表页不需要依赖项目
-    
-    if (status) {
-      query.where('item.status = :status', { status });
-      
-      // If we are looking for APPROVED items, only show the latest version of each project
-      if (status === ItemStatus.APPROVED) {
-        query.andWhere(qb => {
-          const subQuery = qb.subQuery()
-            .select('1')
-            .from(Item, 'next')
-            .where('next.upgradeFromId = item.id')
-            .andWhere('next.status = :status', { status: ItemStatus.APPROVED })
-            .getQuery();
-          return 'NOT EXISTS ' + subQuery;
-        });
-      }
-    }
+  ): Promise<{ items: any[]; total: number }> {
+    const qb = this.itemsRepository.createQueryBuilder('item');
 
     if (type) {
-      query.andWhere('item.type = :type', { type });
+      qb.andWhere('item.type = :type', { type });
     }
 
     if (search) {
-      query.andWhere('(item.name LIKE :search OR item.description LIKE :search)', { search: `%${search}%` });
+      qb.andWhere('(item.name LIKE :search OR item.description LIKE :search)', { search: `%${search}%` });
     }
 
-    query.orderBy('item.createdAt', 'DESC');
+    const projects = await qb.getMany();
+    const projectIds = projects.map((project) => project.id);
 
-    let total = 0;
-    let items: Item[] = [];
+    let codeMap: Map<number, ItemCode>;
+    if (status) {
+      codeMap = await this.getLatestCodeMapByProjectIds(projectIds, status);
+    } else {
+      codeMap = await this.getLatestCodeMapByProjectIds(projectIds);
+    }
 
+    let codes = Array.from(codeMap.values());
+    codes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = codes.length;
     if (page !== undefined && limit !== undefined) {
       const skip = (page - 1) * limit;
-      const take = limit;
-      const [pagedItems, count] = await query.skip(skip).take(take).getManyAndCount();
-      items = pagedItems;
-      total = count;
-    } else {
-      const allItems = await query.getMany();
-      items = allItems;
-      total = allItems.length;
+      codes = codes.slice(skip, skip + limit);
     }
 
-    // 查询 APPROVED 列表时顺带填充缓存，供 findOne 使用
-    if (status === ItemStatus.APPROVED) {
-      for (const item of items) {
-        if (!this.approvedItemsCache.has(item.id)) {
-          this.approvedItemsCache.set(item.id, item);
-          this.writeApprovedItemCache(item);
-        }
-      }
-    }
+    const items = await this.buildItemViewsFromCodes(codes, {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: status === ItemStatus.PENDING || status === ItemStatus.DRAFT,
+    });
 
     return { items, total };
   }
 
-  async findByAuthor(username: string): Promise<Item[]> {
-    const query = this.itemsRepository.createQueryBuilder('item')
-      .leftJoinAndSelect('item.author', 'author')
-      // 移除不必要的关联查询以提升性能
-      .where('author.username = :username', { username })
-      .andWhere('item.status = :status', { status: ItemStatus.APPROVED });
-    
-    // Only show the latest version of each project
-    query.andWhere(qb => {
-      const subQuery = qb.subQuery()
-        .select('1')
-        .from(Item, 'next')
-        .where('next.upgradeFromId = item.id')
-        .andWhere('next.status = :status', { status: ItemStatus.APPROVED })
-        .getQuery();
-      return 'NOT EXISTS ' + subQuery;
+  async findByAuthor(username: string): Promise<any[]> {
+    const author = await this.usersRepository.findOne({ where: { username } });
+    if (!author) {
+      return [];
+    }
+
+    const projects = await this.itemsRepository.find({ where: { authorId: author.id } });
+    const codeMap = await this.getLatestCodeMapByProjectIds(
+      projects.map((project) => project.id),
+      ItemStatus.APPROVED,
+    );
+    const codes = Array.from(codeMap.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+
+    return this.buildItemViewsFromCodes(codes, {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: false,
     });
-    
-    return query.getMany();
   }
 
   async addComment(itemId: number, userId: string, content: string, parentId?: number): Promise<Comment> {
-    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
-    if (!item) throw new NotFoundException('找不到此项目');
+    const project = await this.resolveProjectByAnyId(itemId);
 
     const user = await this.usersService.findById(userId);
-    if (!user) throw new NotFoundException('找不到此用户');
+    if (!user) {
+      throw new NotFoundException('找不到此用户');
+    }
 
-    let parent = null;
     if (parentId) {
-      parent = await this.commentRepository.findOne({ where: { id: parentId } });
-      if (!parent) throw new NotFoundException('找不到父评论');
+      const parent = await this.commentRepository.findOne({ where: { id: parentId } });
+      if (!parent) {
+        throw new NotFoundException('找不到父评论');
+      }
     }
 
     const comment = this.commentRepository.create({
       content,
       authorId: userId,
-      itemId: itemId,
-      parentId: parentId,
+      itemId: project.id,
+      parentId,
     });
 
     return this.commentRepository.save(comment);
   }
 
   async getComments(itemId: number): Promise<Comment[]> {
-    return this.commentRepository.find({
-      where: { itemId: itemId, parentId: IsNull() },
-      relations: ['author', 'replies', 'replies.author'],
+    const project = await this.resolveProjectByAnyId(itemId);
+
+    const roots = await this.commentRepository.find({
+      where: { itemId: project.id, parentId: IsNull() },
       order: { createdAt: 'DESC' },
     });
+
+    if (roots.length === 0) {
+      return [];
+    }
+
+    const rootIds = roots.map((comment) => comment.id);
+    const replies = await this.commentRepository.find({
+      where: { parentId: In(rootIds) },
+      order: { createdAt: 'ASC' },
+    });
+
+    const authorIds = this.uniqueStringIds([
+      ...roots.map((comment) => comment.authorId),
+      ...replies.map((comment) => comment.authorId),
+    ]);
+    const authors = authorIds.length > 0
+      ? await this.usersRepository.find({ where: { id: In(authorIds) } })
+      : [];
+    const authorMap = new Map(authors.map((author) => [author.id, author]));
+
+    const rootMap = new Map<number, Comment>();
+    roots.forEach((root) => {
+      root.author = authorMap.get(root.authorId) || null;
+      root.replies = [];
+      rootMap.set(root.id, root);
+    });
+
+    replies.forEach((reply) => {
+      reply.author = authorMap.get(reply.authorId) || null;
+      const parent = rootMap.get(reply.parentId);
+      if (parent) {
+        parent.replies.push(reply);
+      }
+    });
+
+    return roots;
   }
 
   async blockComment(commentId: number, adminId: string): Promise<Comment> {
     const admin = await this.usersService.findById(adminId);
-    if (!admin || !admin.isAdmin) throw new ForbiddenException('仅管理员可执行此操作');
+    if (!admin || !admin.isAdmin) {
+      throw new ForbiddenException('仅管理员可执行此操作');
+    }
 
     const comment = await this.commentRepository.findOne({ where: { id: commentId } });
-    if (!comment) throw new NotFoundException('找不到此评论');
+    if (!comment) {
+      throw new NotFoundException('找不到此评论');
+    }
 
     comment.isBlocked = true;
     comment.isHandled = true;
@@ -290,733 +662,604 @@ export class ItemsService {
 
   async reportComment(commentId: number): Promise<Comment> {
     const comment = await this.commentRepository.findOne({ where: { id: commentId } });
-    if (!comment) throw new NotFoundException('找不到此评论');
+    if (!comment) {
+      throw new NotFoundException('找不到此评论');
+    }
     comment.reportCount += 1;
     return this.commentRepository.save(comment);
   }
 
   async getReportedComments(adminId: string): Promise<Comment[]> {
     const admin = await this.usersService.findById(adminId);
-    if (!admin || !admin.isAdmin) throw new ForbiddenException('仅管理员可访问');
-    return this.commentRepository.find({
-      where: { reportCount: MoreThan(0), isHandled: false }, // reportCount > 0
-      relations: ['author', 'item'],
+    if (!admin || !admin.isAdmin) {
+      throw new ForbiddenException('仅管理员可访问');
+    }
+
+    const comments = await this.commentRepository.find({
+      where: { reportCount: MoreThan(0), isHandled: false },
       order: { reportCount: 'DESC', createdAt: 'DESC' },
     });
+
+    if (comments.length === 0) {
+      return [];
+    }
+
+    const authorIds = this.uniqueStringIds(comments.map((comment) => comment.authorId));
+    const itemIds = this.uniqueNumberIds(comments.map((comment) => comment.itemId));
+
+    const [authors, items] = await Promise.all([
+      authorIds.length > 0 ? this.usersRepository.find({ where: { id: In(authorIds) } }) : Promise.resolve([]),
+      itemIds.length > 0 ? this.itemsRepository.find({ where: { id: In(itemIds) } }) : Promise.resolve([]),
+    ]);
+
+    const authorMap = new Map(authors.map((author) => [author.id, author]));
+    const itemMap = new Map(items.map((item) => [item.id, item]));
+
+    comments.forEach((comment) => {
+      comment.author = authorMap.get(comment.authorId) || null;
+      comment.item = itemMap.get(comment.itemId) || null;
+    });
+
+    return comments;
   }
 
   async ignoreReport(commentId: number, adminId: string): Promise<Comment> {
     const admin = await this.usersService.findById(adminId);
-    if (!admin || !admin.isAdmin) throw new ForbiddenException('仅管理员可执行');
+    if (!admin || !admin.isAdmin) {
+      throw new ForbiddenException('仅管理员可执行');
+    }
+
     const comment = await this.commentRepository.findOne({ where: { id: commentId } });
-    if (!comment) throw new NotFoundException('找不到此评论');
+    if (!comment) {
+      throw new NotFoundException('找不到此评论');
+    }
+
     comment.isHandled = true;
     return this.commentRepository.save(comment);
   }
 
   async findOne(id: number, userId?: string): Promise<any> {
-    // 优先从已审核缓存中获取
-    let item: Item | null = await this.findApprovedItemById(id);
+    const { code, project } = await this.resolveCodeByAnyId(id, ItemStatus.APPROVED);
 
-    if (!item) {
+    if (code.status !== ItemStatus.APPROVED && project.authorId !== userId) {
+      throw new ForbiddenException('Item not approved');
+    }
+
+    const [view] = await this.buildItemViewsFromCodes([code], {
+      includeCode: true,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+
+    if (!view) {
       throw new NotFoundException('没找到');
     }
 
-    const isPurchased = userId ? await this.itemsRepository.createQueryBuilder('item')
-      .innerJoin('item.purchasedBy', 'purchasedBy')
-      .where('item.id = :id AND purchasedBy.id = :userId', { id, userId })
-      .getCount() > 0 : false;
-
-    const purchaseCountResult = await this.itemsRepository.createQueryBuilder('item')
-      .leftJoin('item.purchasedBy', 'purchasedBy')
-      .where('item.id = :id', { id })
-      .select('COUNT(purchasedBy.id)', 'count')
-      .getRawOne();
-    
-    const purchaseCount = parseInt(purchaseCountResult?.count || '0', 10);
+    const isPurchased = userId ? await this.hasProjectPurchase(project.id, userId) : false;
+    const purchaseCount = await this.itemPurchaseRepository.count({ where: { itemId: project.id } });
 
     let isEnabled = true;
     let isAutoUpdate = true;
     if (userId) {
-      const state = await this.itemStateRepository.findOne({
-        where: { user: { id: userId }, item: { id } }
-      });
+      const state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
       if (state) {
         isEnabled = state.isEnabled;
         isAutoUpdate = state.isAutoUpdate;
       }
     }
 
-    return { ...item, isEnabled, isAutoUpdate, isPurchased, purchaseCount };
+    return { ...view, isEnabled, isAutoUpdate, isPurchased, purchaseCount };
   }
 
-  async getRecursiveDependencies(itemId: number): Promise<Item[]> {
-    const item = await this.itemsRepository.findOne({
-      where: { id: itemId },
-      relations: ['dependencies'],
-    });
-    if (!item || !item.dependencies || item.dependencies.length === 0) {
+  async getRecursiveDependencies(itemId: number): Promise<any[]> {
+    const project = await this.resolveProjectByAnyId(itemId);
+
+    const visited = new Set<number>();
+    let frontier = [project.id];
+
+    while (frontier.length > 0) {
+      const links = await this.itemDependencyRepository.find({ where: { itemId: In(frontier) } });
+      const next: number[] = [];
+      for (const link of links) {
+        if (!visited.has(link.dependencyItemId)) {
+          visited.add(link.dependencyItemId);
+          next.push(link.dependencyItemId);
+        }
+      }
+      frontier = next;
+    }
+
+    if (visited.size === 0) {
       return [];
     }
 
-    const allDeps = new Map<number, Item>();
-    const stack = [...item.dependencies];
-
-    while (stack.length > 0) {
-      const dep = stack.pop()!;
-      if (!allDeps.has(dep.id)) {
-        allDeps.set(dep.id, dep);
-        const fullDep = await this.itemsRepository.findOne({
-          where: { id: dep.id },
-          relations: ['dependencies'],
-        });
-        if (fullDep?.dependencies) {
-          stack.push(...fullDep.dependencies);
-        }
-      }
-    }
-
-    return Array.from(allDeps.values());
+    const codeMap = await this.getLatestCodeMapByProjectIds(Array.from(visited), ItemStatus.APPROVED);
+    const codes = Array.from(codeMap.values());
+    return this.buildItemViewsFromCodes(codes, {
+      includeCode: false,
+      includeDependencies: false,
+      includeUpgradeFrom: false,
+    });
   }
 
-  async findVersions(id: number, userId?: string): Promise<Item[]> {
-    const item = await this.itemsRepository.findOne({
-      where: { id },
-      relations: ['author'],
-    });
-    if (!item) {
-      throw new NotFoundException('找不到项目');
-    }
-
-    const where: any = {
-      name: item.name,
-      author: { id: item.author.id },
-      type: item.type,
-    };
-
-    // If the requester is not the author, only show APPROVED versions
-    if (item.author.id !== userId) {
+  async findVersions(id: number, userId?: string): Promise<any[]> {
+    const project = await this.resolveProjectByAnyId(id);
+    const where: any = { itemId: project.id };
+    if (project.authorId !== userId) {
       where.status = ItemStatus.APPROVED;
     }
 
-    return this.itemsRepository.find({
+    const codes = await this.itemCodeRepository.find({
       where,
-      order: { version: 'DESC' },
+      order: { version: 'DESC', createdAt: 'DESC' },
+    });
+
+    return this.buildItemViewsFromCodes(codes, {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
     });
   }
 
-  async review(id: number, status: ItemStatus, comment?: string): Promise<Item> {
-    const item = await this.itemsRepository.findOne({
-      where: { id },
-      relations: ['upgradeFrom', 'author', 'purchasedBy'],
+  async review(id: number, status: ItemStatus, comment?: string): Promise<any> {
+    const { code, project } = await this.resolveCodeByAnyId(id);
+
+    code.status = status;
+    if (comment !== undefined) {
+      code.reviewComment = comment;
+    }
+
+    const savedCode = await this.itemCodeRepository.save(code);
+
+    if (status === ItemStatus.APPROVED) {
+      const states = await this.itemStateRepository.find({
+        where: { itemId: project.id, isAutoUpdate: true },
+      });
+
+      for (const state of states) {
+        state.selectedCodeId = savedCode.id;
+        await this.itemStateRepository.save(state);
+      }
+
+      this.approvedItemsCache.set(savedCode.id, null);
+      await fsp.unlink(path.join(this.CACHE_DIR, `${savedCode.id}.json.gz`)).catch(() => undefined);
+    }
+
+    const [view] = await this.buildItemViewsFromCodes([savedCode], {
+      includeCode: true,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
     });
 
-    if (!item) {
-      throw new NotFoundException('没找到');
-    }
-
-    // 审核前清空因测试而挂载的用户
-    if (item.purchasedBy && item.purchasedBy.length > 0) {
-      const userIds = item.purchasedBy.map(u => u.id);
-      await this.itemsRepository.createQueryBuilder()
-        .relation(Item, 'purchasedBy')
-        .of(item.id)
-        .remove(userIds);
-      item.purchasedBy = [];
-    }
-
-    item.status = status;
-    if (comment) {
-      item.reviewComment = comment;
-    }
-    
-    const savedItem = await this.itemsRepository.save(item);
-
-    if (status === ItemStatus.APPROVED && item.upgradeFrom) {
-      // 1. 获取显式设置了自动更新的用户状态
-      const previousStates = await this.itemStateRepository.find({
-        where: { 
-          item: { id: item.upgradeFrom.id },
-          isAutoUpdate: true
-        },
-        relations: ['user']
-      });
-
-      // 2. 获取拥有旧版本但没有显式设置过状态的用户（默认视为开启自动更新且启用状态）
-      const itemWithPurchasers = await this.itemsRepository.findOne({
-        where: { id: item.upgradeFrom.id },
-        relations: ['purchasedBy']
-      });
-      const ownersToUpdate = [...previousStates.map(s => ({ user: s.user, wasEnabled: s.isEnabled, state: s }))];
-
-      if (itemWithPurchasers && itemWithPurchasers.purchasedBy) {
-        const userIdsWithState = previousStates.map(s => s.user.id);
-        for (const user of itemWithPurchasers.purchasedBy) {
-          if (!userIdsWithState.includes(user.id)) {
-            ownersToUpdate.push({ user, wasEnabled: true, state: null });
-          }
-        }
-      }
-
-      for (const { user, wasEnabled, state } of ownersToUpdate) {
-        // Remove old version state if exists
-        if (state) {
-          await this.itemStateRepository.remove(state);
-        }
-
-        // Enable new version
-        let newState = await this.itemStateRepository.findOne({
-          where: { user: { id: user.id }, item: { id: item.id } }
-        });
-
-        if (!newState && !wasEnabled) {
-          newState = this.itemStateRepository.create({
-            user: user,
-            item: item,
-            isEnabled: wasEnabled,
-            isAutoUpdate: true
-          });
-          await this.itemStateRepository.save(newState);
-        }
-
-        // Transfer ownership
-        try {
-          await this.itemsRepository.createQueryBuilder()
-            .relation(Item, 'purchasedBy')
-            .of(item.id)
-            .add(user.id);
-          
-          await this.itemsRepository.createQueryBuilder()
-            .relation(Item, 'purchasedBy')
-            .of(item.upgradeFrom.id)
-            .remove(user.id);
-        } catch (e) {
-          console.error(`Failed to transfer ownership for user ${user.id}`, e);
-        }
-      }
-    }
-
-    if (ConfigService.getConfig()?.noticeGoldenKey) {
+    const config = ConfigService.getConfig();
+    if (config?.noticeGoldenKey && view?.author?.username) {
       const statusResult = {
         [ItemStatus.APPROVED]: '通过审核',
         [ItemStatus.REJECTED]: '未通过审核',
         [ItemStatus.PENDING]: '待审核',
         [ItemStatus.DRAFT]: '草稿',
       }[status] || '未知状态';
-      FingerTo(ConfigService.getConfig()?.noticeGoldenKey)
-        .sendNotice(
-          item.author.username, 
-          `您的${ItemTypeLabels[item.type]}《[${
-            item.name
-          }](https://ext.adventext.fun/item/${item.id})》${
-            statusResult
-          }${comment ? `，评审意见：${comment}` : ''}`
-        );
+
+      FingerTo(config.noticeGoldenKey).sendNotice(
+        view.author.username,
+        `您的${ItemTypeLabels[view.type]}《[${view.name}](https://ext.adventext.fun/item/${view.id})》${statusResult}${comment ? `，评审意见：${comment}` : ''}`,
+      );
     }
 
-    return savedItem;
+    return view;
   }
 
-  async addTestItem(itemId: number, userId: string): Promise<Item> {
-    const item = await this.itemsRepository.findOne({
-      where: { id: itemId },
-      relations: ['author', 'purchasedBy', 'dependencies'],
-    });
-    if (!item) {
-      throw new NotFoundException('没找到');
-    }
-    const user = await this.usersService.findById(userId);
-
-    if (item.status !== ItemStatus.PENDING) {
+  async addTestItem(itemId: number, userId: string): Promise<any> {
+    const { code, project } = await this.resolveCodeByAnyId(itemId);
+    if (code.status !== ItemStatus.PENDING) {
       throw new BadRequestException('只能挂载待审核的项目');
     }
 
-    // Check if already in purchasedBy
-    const alreadyPurchased = item.purchasedBy?.some(u => u.id === userId);
-    if (!alreadyPurchased) {
-      if (!item.purchasedBy) {
-        item.purchasedBy = [];
-      }
-      item.purchasedBy.push(user);
-      await this.itemsRepository.save(item);
-    }
+    await this.ensureProjectPurchase(project.id, userId);
 
-    // 自动获得免费的依赖项
-    if (item.dependencies && item.dependencies.length > 0) {
-      for (const dep of item.dependencies) {
+    let state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
+    if (!state) {
+      state = this.itemStateRepository.create({
+        userId,
+        itemId: project.id,
+        selectedCodeId: code.id,
+        isEnabled: true,
+        isAutoUpdate: false,
+      });
+    } else {
+      state.selectedCodeId = code.id;
+      state.isEnabled = true;
+    }
+    await this.itemStateRepository.save(state);
+
+    const [view] = await this.buildItemViewsFromCodes([code], {
+      includeCode: true,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+
+    if (view?.dependencies?.length > 0) {
+      for (const dep of view.dependencies) {
         if (dep.price === 0) {
           try {
             await this.purchase(dep.id, userId);
-          } catch (e) {
-            // Already owned or other error, ignore
+          } catch {
+            // ignore
           }
         }
       }
     }
-    
-    return item;
+
+    return view;
   }
 
-  async purchase(itemId: number, userId: string): Promise<Item> {
-    const item = await this.itemsRepository.findOne({
-      where: { id: itemId },
-      relations: ['author', 'purchasedBy', 'dependencies'],
-    });
-    if (!item) {
-      throw new NotFoundException('没找到');
-    }
-    const user = await this.usersService.findById(userId);
+  async purchase(itemId: number, userId: string): Promise<any> {
+    const { code, project } = await this.resolveCodeByAnyId(itemId);
 
-    if (item.status !== ItemStatus.APPROVED) {
+    if (code.status !== ItemStatus.APPROVED) {
       throw new BadRequestException('未通过审核');
     }
 
-    // Check if already purchased
-    const alreadyPurchased = item.purchasedBy?.some(u => u.id === userId);
-    if (alreadyPurchased) {
-      throw new BadRequestException('已经购入');
-    }
+    const alreadyPurchased = await this.hasProjectPurchase(project.id, userId);
 
-    // Find all versions of the same project to check ownership and manage version single-ownership
-    const allVersions = await this.itemsRepository.find({
-      where: {
-        name: item.name,
-        author: { id: item.author.id },
-        type: item.type,
-      },
-      relations: ['purchasedBy'],
-    });
-
-    let ownsOtherVersion = false;
-    for (const v of allVersions) {
-      if (v.id !== item.id && v.purchasedBy?.some(u => u.id === userId)) {
-        ownsOtherVersion = true;
-        // Remove ownership from other versions (User can only own one version at a time)
-        v.purchasedBy = v.purchasedBy.filter(u => u.id !== userId);
-        await this.itemsRepository.save(v);
+    if (!alreadyPurchased) {
+      const user = await this.usersService.findById(userId);
+      if (!user) {
+        throw new NotFoundException('找不到此用户');
       }
-    }
 
-    if (!ownsOtherVersion) {
       const dbUser = await this.usersService.getUser(user.username);
       const points = dbUser.points;
 
-      // Check if user has enough points
-      if (item.price > 0 && points < item.price) {
+      if (project.price > 0 && points < project.price) {
         throw new BadRequestException('积分不足，无法获取！');
       }
 
-      if (item.price > 0 && user.id !== item.author.id) {
-        const type = ItemTypeLabels[item.type];
-        await this.usersService.updatePoints(user.username, -item.price, `购买${type} ${item.name}`);
-        await this.usersService.updatePoints(item.author.username, item.price * 0.7, `出售${type} ${item.name}`);
-        await this.usersService.updatePoints('admin', item.price * 0.3, `买卖${type} ${item.name} 手续费`);
+      if (project.price > 0 && user.id !== project.authorId) {
+        const typeLabel = ItemTypeLabels[project.type];
+        await this.usersService.updatePoints(user.username, -project.price, `购买${typeLabel} ${project.name}`);
+        const author = await this.usersService.findById(project.authorId);
+        if (author?.username) {
+          await this.usersService.updatePoints(author.username, project.price * 0.7, `出售${typeLabel} ${project.name}`);
+        }
+        await this.usersService.updatePoints('admin', project.price * 0.3, `买卖${typeLabel} ${project.name} 手续费`);
       }
+
+      await this.ensureProjectPurchase(project.id, userId);
     }
 
-    // Add to purchased list
-    if (!item.purchasedBy) {
-      item.purchasedBy = [];
-    }
-    item.purchasedBy.push(user);
-    const savedItem = await this.itemsRepository.save(item);
+    const latestApproved = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
 
-    // Handle dependencies: grant free ones automatically
-    if (item.dependencies && item.dependencies.length > 0) {
-      for (const dep of item.dependencies) {
+    let state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
+    if (!state) {
+      state = this.itemStateRepository.create({
+        userId,
+        itemId: project.id,
+        selectedCodeId: code.id,
+        isEnabled: true,
+        isAutoUpdate: latestApproved ? latestApproved.id === code.id : true,
+      });
+    } else {
+      state.selectedCodeId = code.id;
+      state.isAutoUpdate = latestApproved ? latestApproved.id === code.id : state.isAutoUpdate;
+    }
+    await this.itemStateRepository.save(state);
+
+    const [view] = await this.buildItemViewsFromCodes([code], {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+
+    if (view?.dependencies?.length > 0) {
+      for (const dep of view.dependencies) {
         if (dep.price === 0) {
           try {
             await this.purchase(dep.id, userId);
-          } catch (e) {
-            // Already owned or other error, ignore
+          } catch {
+            // ignore
           }
         }
       }
     }
 
-    return savedItem;
+    return view;
   }
 
   async removePurchase(itemId: number, userId: string): Promise<void> {
-    const item = await this.itemsRepository.findOne({
-      where: { id: itemId },
-      relations: ['purchasedBy'],
-    });
-
-    if (!item) {
-      throw new NotFoundException('没找到');
-    }
-
-    const hasPurchased = item.purchasedBy?.some(u => u.id === userId);
-    if (hasPurchased) {
-      await this.itemsRepository.createQueryBuilder()
-        .relation(Item, 'purchasedBy')
-        .of(item.id)
-        .remove(userId);
-    }
-
-    // 同时删除当前项目的用户状态
-    const state = await this.itemStateRepository.findOne({
-      where: { user: { id: userId }, item: { id: itemId } }
-    });
-    if (state) {
-      await this.itemStateRepository.remove(state);
-    }
+    const project = await this.resolveProjectByAnyId(itemId);
+    await this.itemPurchaseRepository.delete({ itemId: project.id, userId });
+    await this.itemStateRepository.delete({ userId, itemId: project.id });
   }
 
   async getUserPurchases(userId: string, type?: ItemType): Promise<any[]> {
-    const items = await this.itemsRepository.createQueryBuilder('item')
-      .leftJoinAndSelect('item.author', 'author')
-      .leftJoinAndSelect('item.dependencies', 'dependencies')
-      .leftJoin('item.purchasedBy', 'purchasedBy')
-      .leftJoin(UserItemState, 'state', 'state.itemId = item.id AND state.userId = :userId', { userId })
-      .where('purchasedBy.id = :userId OR (author.id = :userId AND state.id IS NOT NULL)', { userId })
-      .andWhere(type ? 'item.type = :type' : '1=1', { type })
-      .getMany();
+    const [purchases, states] = await Promise.all([
+      this.itemPurchaseRepository.find({ where: { userId } }),
+      this.itemStateRepository.find({ where: { userId } }),
+    ]);
 
-    const states = await this.itemStateRepository.find({
-      where: { user: { id: userId } },
-      relations: ['item']
-    });
+    const purchasedProjectIds = new Set(purchases.map((row) => row.itemId));
+    const stateProjectIds = new Set(states.map((row) => row.itemId));
 
-    const mapped = items.map(item => {
-      const state = states.find(s => s.item.id === item.id);
-      return {
-        ...item,
-        isEnabled: state ? state.isEnabled : true,
-        isAutoUpdate: state ? state.isAutoUpdate : true
-      };
-    });
+    const authoredProjects = await this.itemsRepository.find({ where: { authorId: userId } });
+    const authoredProjectIds = new Set(authoredProjects.map((p) => p.id));
 
-    // 为同一个项目（同作者、同名、同类型）只保留一个版本
-    // 优先：1. 已启用的版本 2. 版本号更高的
-    const projects = new Map<string, any>();
-    for (const item of mapped) {
-      const key = `${item.name}-${item.author.id}-${item.type}`;
-      const existing = projects.get(key);
-      if (!existing) {
-        projects.set(key, item);
-      } else {
-        const itemWeight = (item.isEnabled ? 1000 : 0) + (item.isAutoUpdate ? 0 : 2000) + (item.version || 0);
-        const existingWeight = (existing.isEnabled ? 1000 : 0) + (existing.isAutoUpdate ? 0 : 2000) + (existing.version || 0);
-        if (itemWeight > existingWeight) {
-          projects.set(key, item);
+    const candidateProjectIds = this.uniqueNumberIds([
+      ...Array.from(purchasedProjectIds),
+      ...Array.from(stateProjectIds),
+    ]);
+
+    const projects = candidateProjectIds.length > 0
+      ? await this.itemsRepository.find({ where: { id: In(candidateProjectIds) } })
+      : [];
+
+    const stateMap = new Map(states.map((row) => [row.itemId, row]));
+
+    const selectedCodes: ItemCode[] = [];
+    for (const project of projects) {
+      if (type && project.type !== type) {
+        continue;
+      }
+
+      const state = stateMap.get(project.id);
+      let selected: ItemCode = null;
+
+      if (state?.selectedCodeId) {
+        const byState = await this.itemCodeRepository.findOne({ where: { id: state.selectedCodeId, itemId: project.id } });
+        if (byState) {
+          selected = byState;
         }
+      }
+
+      if (!selected) {
+        selected = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
+      }
+
+      if (!selected && authoredProjectIds.has(project.id) && state) {
+        selected = await this.getLatestCodeForProject(project.id);
+      }
+
+      if (!selected) {
+        continue;
+      }
+
+      const visible = purchasedProjectIds.has(project.id) || (authoredProjectIds.has(project.id) && !!state);
+      if (visible) {
+        selectedCodes.push(selected);
       }
     }
 
-    return Array.from(projects.values());
+    const views = await this.buildItemViewsFromCodes(selectedCodes, {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+
+    return views.map((view) => {
+      const state = stateMap.get(view.projectId);
+      return {
+        ...view,
+        isEnabled: state ? state.isEnabled : true,
+        isAutoUpdate: state ? state.isAutoUpdate : true,
+      };
+    });
   }
 
   async toggleItemState(itemId: number, userId: string, isEnabled: boolean): Promise<any> {
     const user = await this.usersService.findById(userId);
-    const item = await this.findOne(itemId);
+    if (!user) {
+      throw new NotFoundException('找不到此用户');
+    }
 
-    // Check if user actually owns it
-    // Check purchasedBy relations or if it is the author
-    const query = this.itemsRepository.createQueryBuilder('item')
-      .leftJoin('item.purchasedBy', 'purchasedBy')
-      .leftJoin('item.author', 'author')
-      .where('item.id = :itemId', { itemId })
-      .andWhere('(purchasedBy.id = :userId OR author.id = :userId)', { userId })
-      .getOne();
-    
-    if (!await query) {
+    const { code, project } = await this.resolveCodeByAnyId(itemId);
+    const owned = project.authorId === userId || await this.hasProjectPurchase(project.id, userId);
+    if (!owned) {
       throw new UnauthorizedException('您尚未拥有此项目');
     }
 
-    // 如果当前要开启，则关闭该项目（同作者、同名、同类型）的其他版本
-    if (isEnabled) {
-      const allVersionsOfProject = await this.itemsRepository.find({
-        where: {
-          name: item.name,
-          author: { id: item.author.id },
-          type: item.type,
-        }
+    let state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
+    if (!state) {
+      state = this.itemStateRepository.create({
+        userId,
+        itemId: project.id,
+        selectedCodeId: code.id,
+        isEnabled,
+        isAutoUpdate: true,
       });
-      
-      let storageToMigrate = null;
-
-      for (const v of allVersionsOfProject) {
-        if (v.id !== itemId) {
-          let otherState = await this.itemStateRepository.findOne({
-            where: { user: { id: userId }, item: { id: v.id } }
-          });
-          
-          if (!otherState) {
-            // 检查是否是通过 purchasedBy 默认开启的，如果是，则需要显式设为 false
-            const isVInRange = await this.itemsRepository.createQueryBuilder('item')
-              .leftJoin('item.purchasedBy', 'purchasedBy')
-              .where('item.id = :vid AND purchasedBy.id = :userId', { vid: v.id, userId })
-              .getCount() > 0;
-            
-            if (isVInRange) {
-               await this.itemStateRepository.save(this.itemStateRepository.create({
-                 user,
-                 item: { id: v.id } as any,
-                 isEnabled: false
-               }));
-            }
-          } else {
-            // Found a state from another version, keep its storage for migration
-            if (otherState.storage && Object.keys(otherState.storage).length > 0) {
-              storageToMigrate = otherState.storage;
-            }
-            await this.itemStateRepository.remove(otherState);
-          }
-        }
-      }
-
-      let state = await this.itemStateRepository.findOne({
-        where: { user: { id: userId }, item: { id: itemId } }
-      });
-
-      if (!state) {
-        state = this.itemStateRepository.create({
-          user,
-          item,
-          isEnabled,
-          isAutoUpdate: true,
-          storage: storageToMigrate || {}
-        });
-      } else {
-        state.isEnabled = isEnabled;
-        if (storageToMigrate) {
-          state.storage = { ...storageToMigrate, ...(state.storage || {}) };
-        }
-      }
-
-      const allVersionsSorted = await this.itemsRepository.find({
-        where: {
-          name: item.name,
-          author: { id: item.author.id },
-          type: item.type,
-        },
-        order: { version: 'DESC' },
-        take: 1
-      });
-
-      if (allVersionsSorted.length > 0) {
-        const latestVersion = allVersionsSorted[0];
-        // 如果启用的版本不是最新版本，则关闭自动更新
-        if (item.version < latestVersion.version) {
-          state.isAutoUpdate = false;
-        } else {
-          // 如果启用的版本是最新版本，则开启自动更新
-          state.isAutoUpdate = true;
-        }
-      }
-
-      await this.itemStateRepository.save(state);
-      return { isEnabled: state.isEnabled, isAutoUpdate: state.isAutoUpdate };
-    } else {
-      let state = await this.itemStateRepository.findOne({
-        where: { user: { id: userId }, item: { id: itemId } }
-      });
-
-      if (!state) {
-        state = this.itemStateRepository.create({
-          user,
-          item,
-          isEnabled: false,
-          isAutoUpdate: true
-        });
-      } else {
-        state.isEnabled = false;
-      }
-
-      if (item.status === ItemStatus.DRAFT) {
-        // 如果是草稿被关闭了，则移除状态记录，恢复默认开启（购买了但没有显式设置状态的用户默认是开启的）
-        await this.itemStateRepository.remove(state);
-        return { isEnabled: false, isAutoUpdate: true };
-      }
-      
-      await this.itemStateRepository.save(state);
-      return { isEnabled: false, isAutoUpdate: state.isAutoUpdate };
     }
+
+    state.isEnabled = isEnabled;
+
+    if (isEnabled) {
+      state.selectedCodeId = code.id;
+      const latestApproved = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
+      state.isAutoUpdate = latestApproved ? latestApproved.id === code.id : true;
+    }
+
+    await this.itemStateRepository.save(state);
+    return { isEnabled: state.isEnabled, isAutoUpdate: state.isAutoUpdate };
   }
 
   async setAutoUpdate(itemId: number, userId: string, isAutoUpdate: boolean): Promise<any> {
-    const user = await this.usersService.findById(userId);
-    const item = await this.findOne(itemId);
-
-    // Check if user actually owns it
-    const query = this.itemsRepository.createQueryBuilder('item')
-      .leftJoin('item.purchasedBy', 'purchasedBy')
-      .leftJoin('item.author', 'author')
-      .where('item.id = :itemId', { itemId })
-      .andWhere('(purchasedBy.id = :userId OR author.id = :userId)', { userId })
-      .getOne();
-    
-    if (!await query) {
+    const { code, project } = await this.resolveCodeByAnyId(itemId);
+    const owned = project.authorId === userId || await this.hasProjectPurchase(project.id, userId);
+    if (!owned) {
       throw new UnauthorizedException('您尚未拥有此项目');
     }
 
-    let state = await this.itemStateRepository.findOne({
-      where: { user: { id: userId }, item: { id: itemId } }
-    });
-
+    let state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
     if (!state) {
       state = this.itemStateRepository.create({
-        user,
-        item,
-        isEnabled: true, // Default enabled if creating state for the first time
-        isAutoUpdate
+        userId,
+        itemId: project.id,
+        selectedCodeId: code.id,
+        isEnabled: true,
+        isAutoUpdate,
       });
     } else {
       state.isAutoUpdate = isAutoUpdate;
+      if (isAutoUpdate) {
+        const latestApproved = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
+        if (latestApproved) {
+          state.selectedCodeId = latestApproved.id;
+        }
+      }
     }
 
     await this.itemStateRepository.save(state);
     return { isAutoUpdate: state.isAutoUpdate };
   }
 
-  async withdraw(id: number, userId: string): Promise<Item> {
-    const item = await this.itemsRepository.findOne({
-      where: { id },
-      relations: ['author']
-    });
-    if (!item) {
-      throw new NotFoundException('找不到项目');
-    }
-    if (item.author.id !== userId) {
+  async withdraw(id: number, userId: string): Promise<any> {
+    const { code, project } = await this.resolveCodeForOperation(id, [ItemStatus.PENDING]);
+    if (project.authorId !== userId) {
       throw new UnauthorizedException('无权操作');
     }
-    if (item.status !== ItemStatus.PENDING) {
-      throw new BadRequestException('只有待审核的项目可以撤回');
-    }
-    item.status = ItemStatus.DRAFT;
-    return this.itemsRepository.save(item);
+
+    code.status = ItemStatus.DRAFT;
+    const saved = await this.itemCodeRepository.save(code);
+    const [view] = await this.buildItemViewsFromCodes([saved], {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+    return view;
   }
 
   async delete(id: number, userId: string): Promise<void> {
-    const item = await this.itemsRepository.findOne({
-      where: { id },
-      relations: ['author']
-    });
-    if (!item) {
-      throw new NotFoundException('找不到项目');
-    }
-    if (item.author.id !== userId) {
+    const { code, project } = await this.resolveCodeForOperation(id, [ItemStatus.DRAFT]);
+    if (project.authorId !== userId) {
       throw new UnauthorizedException('无权操作');
     }
-    if (item.status !== ItemStatus.DRAFT) {
-      throw new BadRequestException('只有草稿可以删除');
-    }
-    // 检查是否有 state 依赖这个项目，如果有则一并删除
-    const states = await this.itemStateRepository.find({
-      where: { item: { id } }
-    });
-    await this.itemStateRepository.remove(states);
-    await this.itemsRepository.remove(item);
-  }
 
-  async findMyItems(userId: string, type?: ItemType): Promise<Item[]> {
-    return this.itemsRepository.createQueryBuilder('item')
-      .leftJoinAndSelect('item.author', 'author')
-      .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
-      .leftJoinAndSelect('item.dependencies', 'dependencies')
-      .where('author.id = :userId', { userId })
-      .andWhere(type ? 'item.type = :type' : '1=1', { type })
-      .andWhere(qb => {
-        const subQuery = qb.subQuery()
-          .select('1')
-          .from(Item, 'newer')
-          .where('newer.upgradeFromId = item.id')
-          .getQuery();
-        return `NOT EXISTS ${subQuery}`;
-      })
-      .orderBy('item.createdAt', 'DESC')
-      .getMany();
-  }
+    await this.itemCodeRepository.delete({ id: code.id });
 
-  async findMyDrafts(userId: string, type?: ItemType): Promise<Item[]> {
-    return this.itemsRepository.createQueryBuilder('item')
-      .leftJoinAndSelect('item.author', 'author')
-      .leftJoinAndSelect('item.upgradeFrom', 'upgradeFrom')
-      .leftJoinAndSelect('item.dependencies', 'dependencies')
-      .where('author.id = :userId', { userId })
-      .andWhere('item.status = :status', { status: ItemStatus.DRAFT })
-      .orderBy('item.createdAt', 'DESC')
-      .getMany();
-  }
-
-  async updateDraft(id: number, data: Partial<Item>, userId: string, dependencyIds?: number[]): Promise<Item> {
-    const item = await this.itemsRepository.findOne({
-      where: { id, status: ItemStatus.DRAFT },
-      relations: ['author'],
-    });
-
-    if (!item) {
-      throw new NotFoundException('草稿不存在');
+    const left = await this.itemCodeRepository.count({ where: { itemId: project.id } });
+    if (left === 0) {
+      await this.itemStateRepository.delete({ itemId: project.id });
+      await this.itemDependencyRepository.delete({ itemId: project.id });
+      await this.itemDependencyRepository.delete({ dependencyItemId: project.id });
+      await this.itemPurchaseRepository.delete({ itemId: project.id });
+      await this.commentRepository.delete({ itemId: project.id });
+      await this.itemsRepository.delete({ id: project.id });
     }
 
-    if (item.author.id !== userId) {
+    this.approvedItemsCache.delete(code.id);
+    await fsp.unlink(path.join(this.CACHE_DIR, `${code.id}.json.gz`)).catch(() => undefined);
+  }
+
+  async findMyItems(userId: string, type?: ItemType): Promise<any[]> {
+    const where: any = { authorId: userId };
+    if (type) {
+      where.type = type;
+    }
+
+    const projects = await this.itemsRepository.find({ where });
+    const projectIds = projects.map((project) => project.id);
+    if (projectIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.itemCodeRepository.createQueryBuilder('code')
+      .where('code.itemId IN (:...projectIds)', { projectIds })
+      .andWhere('code.status != :draft', { draft: ItemStatus.DRAFT })
+      .orderBy('code.itemId', 'ASC')
+      .addOrderBy('code.version', 'DESC')
+      .addOrderBy('code.createdAt', 'DESC')
+      .getMany();
+
+    const latestMap = new Map<number, ItemCode>();
+    for (const row of rows) {
+      if (!latestMap.has(row.itemId)) {
+        latestMap.set(row.itemId, row);
+      }
+    }
+
+    return this.buildItemViewsFromCodes(Array.from(latestMap.values()), {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+  }
+
+  async findMyDrafts(userId: string, type?: ItemType): Promise<any[]> {
+    const where: any = { authorId: userId };
+    if (type) {
+      where.type = type;
+    }
+
+    const projects = await this.itemsRepository.find({ where });
+    const projectIds = projects.map((project) => project.id);
+    if (projectIds.length === 0) {
+      return [];
+    }
+
+    const drafts = await this.itemCodeRepository.find({
+      where: { itemId: In(projectIds), status: ItemStatus.DRAFT },
+      order: { createdAt: 'DESC', version: 'DESC' },
+    });
+
+    return this.buildItemViewsFromCodes(drafts, {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+  }
+
+  async updateDraft(id: number, data: Partial<Item>, userId: string, dependencyIds?: number[]): Promise<any> {
+    const { code, project } = await this.resolveCodeForOperation(id, [ItemStatus.DRAFT]);
+    if (project.authorId !== userId) {
       throw new UnauthorizedException('无权修改此草稿');
     }
 
-    if (dependencyIds && data.type !== ItemType.APP_EXTENSION && data.type !== ItemType.APP_THEME) {
-      if (dependencyIds.length > 0) {
-        item.dependencies = await this.itemsRepository.find({
-          where: dependencyIds.map(id => ({ id }))
-        });
-      } else {
-        item.dependencies = [];
-      }
-    } else if (data.type === ItemType.APP_EXTENSION || data.type === ItemType.APP_THEME) {
-      item.dependencies = [];
-    }
-
-    // If item already has an identifier, don't allow changing it
-    if (item.identifier && data.identifier && item.identifier !== data.identifier) {
+    if (project.identifier && data.identifier && project.identifier !== data.identifier) {
       throw new BadRequestException('一旦设定，标识符不可修改');
     }
 
-    Object.assign(item, data);
+    const draftCode = (data as any).code;
+    const effectiveCode = draftCode !== undefined ? draftCode : code.code;
 
-    if (item.type === ItemType.APP_EXTENSION || item.type === ItemType.APP_THEME) {
-      item.matchUrls = null;
-      if (item.type === ItemType.APP_EXTENSION) {
-        if (!item.code) {
-          throw new BadRequestException('代码不能为空');
-        }
-        const regex = /\/\/\s*==FishPiPlugin==[\s\S]*?\/\/\s*==\/FishPiPlugin==/;
-        if (!regex.test(item.code)) {
-          throw new BadRequestException('APP扩展内容前端必须包含 // ==FishPiPlugin== 与 // ==/FishPiPlugin== 元数据');
-        }
-      } else if (item.type === ItemType.APP_THEME) {
-        if (!item.code) {
-          throw new BadRequestException('配置内容不能为空');
-        }
-        try {
-          const parsed = JSON.parse(item.code);
-          if (typeof parsed !== 'object' || parsed === null) {
-            throw new BadRequestException('APP主题内容必须是一个有效的JSON对象');
-          }
-        } catch (e: any) {
-          throw new BadRequestException('APP主题内容必须是一个合法的JSON格式: ' + e.message);
-        }
-      }
+    this.validateCodeByType((data.type || project.type) as ItemType, effectiveCode);
+
+    if (data.name !== undefined) project.name = data.name;
+    if (data.description !== undefined) project.description = data.description;
+    if (data.price !== undefined) project.price = data.price;
+    if (data.type !== undefined) project.type = data.type;
+    if (!project.identifier && data.identifier) project.identifier = data.identifier;
+
+    await this.itemsRepository.save(project);
+
+    if ((data as any).language !== undefined) code.language = (data as any).language;
+    if ((data as any).code !== undefined) code.code = (data as any).code;
+    if ((data as any).matchUrls !== undefined) {
+      code.matchUrls = project.type === ItemType.APP_EXTENSION || project.type === ItemType.APP_THEME
+        ? null
+        : (data as any).matchUrls;
     }
 
-    return this.itemsRepository.save(item);
+    const savedCode = await this.itemCodeRepository.save(code);
+
+    if (dependencyIds && project.type !== ItemType.APP_EXTENSION && project.type !== ItemType.APP_THEME) {
+      await this.replaceDependencies(project.id, dependencyIds);
+    } else if (project.type === ItemType.APP_EXTENSION || project.type === ItemType.APP_THEME) {
+      await this.replaceDependencies(project.id, []);
+    }
+
+    const [view] = await this.buildItemViewsFromCodes([savedCode], {
+      includeCode: true,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+    return view;
   }
 
-  async updateIdentifier(id: number, identifier: string, userId: string): Promise<Item> {
-    const item = await this.itemsRepository.findOne({
-      where: { id },
-      relations: ['author'],
-    });
-
-    if (!item) {
-      throw new NotFoundException('找不到此作品');
-    }
-
-    if (item.author.id !== userId) {
+  async updateIdentifier(id: number, identifier: string, userId: string): Promise<any> {
+    const project = await this.resolveProjectByAnyId(id);
+    if (project.authorId !== userId) {
       throw new UnauthorizedException('无权修改此作品');
     }
 
-    if (item.identifier) {
+    if (project.identifier) {
       throw new BadRequestException('一旦设定，标识符不可修改');
     }
 
@@ -1024,137 +1267,92 @@ export class ItemsService {
       throw new BadRequestException('标识符长度至少为3位');
     }
 
-    // Apply to ALL versions of this project
-    // Find absolute root
-    let rootItem = item;
-    while (rootItem.upgradeFromId) {
-      const parent = await this.itemsRepository.findOne({ where: { id: rootItem.upgradeFromId } });
-      if (!parent) break;
-      rootItem = parent;
-    }
-
-    // Update all items in this chain
-    const itemsToUpdate = [];
-    const chainIds = new Set<number>();
-    const collectChain = async (currentItem: Item) => {
-      currentItem.identifier = identifier;
-      itemsToUpdate.push(currentItem);
-      chainIds.add(currentItem.id);
-      const children = await this.itemsRepository.find({ where: { upgradeFromId: currentItem.id } });
-      for (const child of children) {
-        await collectChain(child);
-      }
-    };
-    await collectChain(rootItem);
-
-    // Check if identifier is already used by another project
-    // If identifier is found, it must belong to one of our chainIds
-    const existing = await this.itemsRepository.findOne({
-      where: { identifier }
-    });
-    if (existing && !chainIds.has(existing.id)) {
+    const existing = await this.itemsRepository.findOne({ where: { identifier } });
+    if (existing && existing.id !== project.id) {
       throw new BadRequestException('该标识符已被其他作品占用');
     }
 
-    await this.itemsRepository.save(itemsToUpdate);
-    return item;
-  }
+    project.identifier = identifier;
+    await this.itemsRepository.save(project);
 
-  async publishDraft(id: number, userId: string): Promise<Item> {
-    const item = await this.itemsRepository.findOne({
-      where: { id, status: ItemStatus.DRAFT },
-      relations: ['author'],
-    });
-
-    if (!item) {
-      throw new NotFoundException('草稿不存在');
+    const latestCode = await this.getLatestCodeForProject(project.id);
+    if (!latestCode) {
+      return project;
     }
 
-    if (item.author.id !== userId) {
+    const [view] = await this.buildItemViewsFromCodes([latestCode], {
+      includeCode: false,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
+    return view;
+  }
+
+  async publishDraft(id: number, userId: string): Promise<any> {
+    const { code, project } = await this.resolveCodeForOperation(id, [ItemStatus.DRAFT]);
+    if (project.authorId !== userId) {
       throw new UnauthorizedException('无权发布此草稿');
     }
 
-    item.status = ItemStatus.PENDING;
+    code.status = ItemStatus.PENDING;
+    const saved = await this.itemCodeRepository.save(code);
 
-    this.sendPublishNotice(item);
+    const [view] = await this.buildItemViewsFromCodes([saved], {
+      includeCode: true,
+      includeDependencies: true,
+      includeUpgradeFrom: true,
+    });
 
-    return this.itemsRepository.save(item);
-  }
-
-  private sendPublishNotice(item: Item) {
-    if (item.status !== ItemStatus.PENDING) return;
-    const config = ConfigService.getConfig();
-    if (config?.noticeGoldenKey && config?.noticeUsers) {
-      const noticeFinger = FingerTo(config.noticeGoldenKey);
-      config.noticeUsers.split(',').forEach(username => {
-        noticeFinger.sendNotice(
-          username.trim(), 
-          `用户${item.author.username}发布了新的${
-            ItemTypeLabels[item.type]
-          }《${item.name}》[待审核](https://ext.adventext.fun/admin)`
-        );
-       });
-    }
+    await this.sendPublishNotice(view);
+    return view;
   }
 
   async getStorage(userId: string, itemId: number): Promise<Record<string, any>> {
-    const state = await this.itemStateRepository.findOne({
-      where: { user: { id: userId }, item: { id: itemId } }
-    });
+    const project = await this.resolveProjectByAnyId(itemId);
+    const state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
     return state?.storage || {};
   }
 
   async setStorageItem(userId: string, itemId: number, key: string, value: any): Promise<void> {
-    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
-    if (!item) throw new NotFoundException('找不到此项目');
+    const project = await this.resolveProjectByAnyId(itemId);
 
-    let state = await this.itemStateRepository.findOne({
-      where: { user: { id: userId }, item: { id: itemId } },
-      relations: ['user', 'item']
-    });
-
+    let state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
     if (!state) {
-      const user = await this.usersService.findById(userId);
-      if (!user) throw new NotFoundException('找不到此用户');
-      
+      const latestApproved = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
       state = this.itemStateRepository.create({
-        user,
-        item,
+        userId,
+        itemId: project.id,
+        selectedCodeId: latestApproved?.id || null,
         storage: {},
         isEnabled: true,
-        isAutoUpdate: true
+        isAutoUpdate: true,
       });
     }
 
     if (!state.storage) {
       state.storage = {};
     }
-
     state.storage[key] = value;
 
     if (JSON.stringify(state.storage).length > 256 * 1024) {
-       throw new BadRequestException('存储数据超过限制 (256KB)');
+      throw new BadRequestException('存储数据超过限制 (256KB)');
     }
 
     await this.itemStateRepository.save(state);
   }
 
   async removeStorageItem(userId: string, itemId: number, key: string): Promise<void> {
-     const state = await this.itemStateRepository.findOne({
-      where: { user: { id: userId }, item: { id: itemId } }
-    });
-    
-    if (state && state.storage) {
+    const project = await this.resolveProjectByAnyId(itemId);
+    const state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
+    if (state?.storage) {
       delete state.storage[key];
       await this.itemStateRepository.save(state);
     }
   }
 
   async clearStorage(userId: string, itemId: number): Promise<void> {
-     const state = await this.itemStateRepository.findOne({
-      where: { user: { id: userId }, item: { id: itemId } }
-    });
-    
+    const project = await this.resolveProjectByAnyId(itemId);
+    const state = await this.itemStateRepository.findOne({ where: { userId, itemId: project.id } });
     if (state) {
       state.storage = {};
       await this.itemStateRepository.save(state);
@@ -1162,24 +1360,30 @@ export class ItemsService {
   }
 
   async getGlobalStorage(itemId: number): Promise<Record<string, any>> {
-    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
-    if (!item?.identifier) return {};
-    const gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
+    const project = await this.resolveProjectByAnyId(itemId);
+    if (!project.identifier) {
+      return {};
+    }
+
+    const gs = await this.globalStorageRepository.findOne({ where: { identifier: project.identifier } });
     return gs?.storage || {};
   }
 
   async setGlobalStorageItem(itemId: number, key: string, value: any): Promise<void> {
-    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
-    if (!item?.identifier) {
+    const project = await this.resolveProjectByAnyId(itemId);
+    if (!project.identifier) {
       throw new BadRequestException('该作品尚未设置标识符，无法使用 globalStorage');
     }
 
-    let gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
+    let gs = await this.globalStorageRepository.findOne({ where: { identifier: project.identifier } });
     if (!gs) {
-      gs = this.globalStorageRepository.create({ identifier: item.identifier, storage: {} });
+      gs = this.globalStorageRepository.create({ identifier: project.identifier, storage: {} });
     }
 
-    if (!gs.storage) gs.storage = {};
+    if (!gs.storage) {
+      gs.storage = {};
+    }
+
     gs.storage[key] = value;
 
     if (JSON.stringify(gs.storage).length > 1024 * 1024 * 10) {
@@ -1190,21 +1394,25 @@ export class ItemsService {
   }
 
   async removeGlobalStorageItem(itemId: number, key: string): Promise<void> {
-    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
-    if (!item?.identifier) return;
+    const project = await this.resolveProjectByAnyId(itemId);
+    if (!project.identifier) {
+      return;
+    }
 
-    const gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
-    if (gs && gs.storage) {
+    const gs = await this.globalStorageRepository.findOne({ where: { identifier: project.identifier } });
+    if (gs?.storage) {
       delete gs.storage[key];
       await this.globalStorageRepository.save(gs);
     }
   }
 
   async clearGlobalStorage(itemId: number): Promise<void> {
-    const item = await this.itemsRepository.findOne({ where: { id: itemId } });
-    if (!item?.identifier) return;
+    const project = await this.resolveProjectByAnyId(itemId);
+    if (!project.identifier) {
+      return;
+    }
 
-    const gs = await this.globalStorageRepository.findOne({ where: { identifier: item.identifier } });
+    const gs = await this.globalStorageRepository.findOne({ where: { identifier: project.identifier } });
     if (gs) {
       gs.storage = {};
       await this.globalStorageRepository.save(gs);

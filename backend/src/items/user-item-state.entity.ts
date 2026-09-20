@@ -1,18 +1,24 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Unique, Index } from 'typeorm';
 import { User } from '../users/user.entity';
 import { Item } from './item.entity';
 
 @Entity()
-@Unique(['user', 'item'])
+@Unique(['userId', 'itemId'])
 export class UserItemState {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => User)
-  user: User;
+  @Column({ length: 64 })
+  @Index()
+  userId: string;
 
-  @ManyToOne(() => Item)
-  item: Item;
+  @Column()
+  @Index()
+  itemId: number;
+
+  @Column({ nullable: true, comment: '当前选中的版本ID' })
+  @Index()
+  selectedCodeId: number;
 
   @Column({ default: true, comment: '是否启用' })
   isEnabled: boolean;
@@ -22,4 +28,8 @@ export class UserItemState {
 
   @Column({ type: 'simple-json', nullable: true, comment: '配置数据' })
   storage: Record<string, any>;
+
+  // 以下字段为运行时回填字段，不参与 ORM 映射
+  user?: User;
+  item?: Item;
 }

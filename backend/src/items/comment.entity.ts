@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 import { User } from '../users/user.entity';
 import { Item } from './item.entity';
 
@@ -22,24 +22,21 @@ export class Comment {
   @Column({ default: false, comment: '管理员已处理位' })
   isHandled: boolean;
 
-  @Column({ comment: '发布者ID' })
+  @Column({ comment: '发布者ID', length: 64 })
+  @Index()
   authorId: string;
 
   @Column({ comment: '作品ID' })
+  @Index()
   itemId: number;
 
   @Column({ nullable: true, comment: '父评论ID' })
+  @Index()
   parentId: number;
 
-  @ManyToOne(() => Item, item => item.comments, { createForeignKeyConstraints: false })
-  item: Item;
-
-  @ManyToOne(() => User, { createForeignKeyConstraints: false })
-  author: User;
-
-  @ManyToOne(() => Comment, comment => comment.replies, { nullable: true, createForeignKeyConstraints: false })
-  parent: Comment;
-
-  @OneToMany(() => Comment, comment => comment.parent)
-  replies: Comment[];
+  // 以下字段为运行时回填字段，不参与 ORM 映射
+  item?: Item;
+  author?: User;
+  parent?: Comment;
+  replies?: Comment[];
 }

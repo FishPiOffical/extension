@@ -1,6 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany, ManyToMany } from 'typeorm';
+import { Entity, Column, CreateDateColumn } from 'typeorm';
 import { Item } from '../items/item.entity';
-import { Comment } from '../items/comment.entity';
 
 @Entity()
 export class User {
@@ -22,9 +21,7 @@ export class User {
   @CreateDateColumn({ comment: '注册时间' })
   createdAt: Date;
 
-  @OneToMany(() => Item, item => item.author)
-  items: Item[];
-
-  @ManyToMany(() => Item, item => item.purchasedBy)
-  purchasedItems: Item[];
+  // 以下字段为运行时回填字段，不参与 ORM 映射
+  items?: Item[];
+  purchasedItems?: Item[];
 }

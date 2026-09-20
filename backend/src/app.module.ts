@@ -14,7 +14,9 @@ const modules = ConfigService.isConfigured()
         type: 'mysql',
         ...ConfigService.getConfig().db,
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true,
+        // 迁移过的数据库建议在 config.json 中设置 db.synchronize = false，
+        // 避免启动时 TypeORM 自动改表结构导致数据被重置为默认值。
+        synchronize: ConfigService.getConfig().db?.synchronize ?? true,
       }),
       AuthModule,
       UsersModule,

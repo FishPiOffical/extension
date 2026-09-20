@@ -5,10 +5,11 @@ import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { ItemsModule } from '../items/items.module';
 import { Comment } from '../items/comment.entity';
+import { Item } from '../items/item.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Comment]),
+    TypeOrmModule.forFeature([User, Comment, Item]),
     forwardRef(() => ItemsModule),
   ],
   providers: [UsersService],

@@ -8,7 +8,10 @@
     "postbuild": "copyfiles package.json package-lock.json ../release/",
     "start": "nest start -p tsconfig.json",
     "dev": "nest start -p tsconfig.json --watch",
-    "prod": "node dist/main"
+    "prod": "node dist/main",
+    "migration:export": "node migrations/export-legacy-data.js",
+    "migration:import": "node migrations/import-package-migrate.js",
+    "migration:repair-status": "node migrations/repair-item-code-status.js"
   },
   "keywords": [],
   "author": "",

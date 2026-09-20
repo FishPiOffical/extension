@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed } from 'vue'
-import { getPendingItems, reviewItem, addTestItem, getReportedComments, blockComment, ignoreReport, type Comment } from '@/api/items'
+import { getPendingItems, getItemById, reviewItem, addTestItem, getReportedComments, blockComment, ignoreReport, type Comment } from '@/api/items'
 import hljs from 'highlight.js'
 import 'highlight.js/styles/github-dark.css'
 import Message from '@/components/msg'
@@ -52,13 +52,19 @@ const handleIgnoreReport = async (id: number) => {
 }
 
 const openReviewModal = async (item: any) => {
-  selectedItem.value = item
-  reviewComment.value = ''
-  viewMode.value = item.upgradeFrom ? 'diff' : 'code'
-  await nextTick()
-  const block = document.querySelector('.modal pre code')
-  if (block) {
-    hljs.highlightElement(block as HTMLElement)
+  try {
+    const detailRes = await getItemById(item.id)
+    selectedItem.value = detailRes.data
+    reviewComment.value = ''
+    viewMode.value = selectedItem.value.upgradeFrom ? 'diff' : 'code'
+    await nextTick()
+    const block = document.querySelector('.modal pre code')
+    if (block) {
+      hljs.highlightElement(block as HTMLElement)
+    }
+  } catch (error) {
+    console.error('Failed to load item detail for review:', error)
+    Message.error('加载审核详情失败')
   }
 }
 

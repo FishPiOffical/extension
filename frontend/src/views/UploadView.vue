@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { uploadItem, getMyPublishedItems, getMyDrafts, getItems, updateDraft, publishDraft, type Item } from '@/api/items'
+import { uploadItem, getMyPublishedItems, getMyDrafts, getItems, getItemById, updateDraft, publishDraft, type Item } from '@/api/items'
 import Message from '@/components/msg'
 import DevDocsModal from '@/components/docs/DevDocsModal.vue'
 
@@ -79,8 +79,9 @@ onMounted(async () => {
   const draftId = route.query.draftId
   if (draftId) {
     try {
-      const draftsRes = await getMyDrafts()
-      const draft = draftsRes.data.find((d: Item) => d.id === parseInt(draftId as string))
+      const draftItemId = parseInt(draftId as string)
+      const draftRes = await getItemById(draftItemId)
+      const draft = draftRes.data as Item
       if (draft) {
         editingDraftId.value = draft.id
         name.value = draft.name
@@ -90,7 +91,7 @@ onMounted(async () => {
         price.value = draft.price
         type.value = draft.type
         language.value = draft.language
-        code.value = draft.code
+        code.value = draft.code || ''
         matchUrls.value = (draft.matchUrls || []).join('\n')
         selectedDependencyIds.value = (draft.dependencies || []).map((d: any) => d.id)
       }
@@ -98,10 +99,11 @@ onMounted(async () => {
   }
 })
 
-watch(selectedItemId, (newId) => {
+watch(selectedItemId, async (newId) => {
   if (newId) {
-    const item = myItems.value.find(i => i.id === newId)
-    if (item) {
+    try {
+      const itemRes = await getItemById(newId)
+      const item = itemRes.data as Item
       name.value = item.name
       description.value = item.description
       identifier.value = item.identifier || ''
@@ -111,6 +113,8 @@ watch(selectedItemId, (newId) => {
       code.value = item.code || ''
       matchUrls.value = (item.matchUrls || []).join('\n')
       selectedDependencyIds.value = (item.dependencies || []).map((d: any) => d.id)
+    } catch (e) {
+      console.error(e)
     }
   }
 })

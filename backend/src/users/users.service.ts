@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { User } from './user.entity';
 import { Comment } from '../items/comment.entity';
+import { Item } from '../items/item.entity';
 import Fishpi, { FingerTo, UserInfo } from 'fishpi';
 import { ConfigService } from 'src/config/config.service';
 
@@ -13,16 +14,29 @@ export class UsersService {
     private usersRepository: Repository<User>,
     @InjectRepository(Comment)
     private commentRepository: Repository<Comment>,
+    @InjectRepository(Item)
+    private itemRepository: Repository<Item>,
   ) {}
 
   async findUserComments(userId: string, page: number = 1, limit: number = 10): Promise<{ items: Comment[], total: number }> {
     const [items, total] = await this.commentRepository.findAndCount({
       where: { authorId: userId },
-      relations: ['item'],
       order: { createdAt: 'DESC' },
       skip: (page - 1) * limit,
       take: limit,
     });
+
+    const itemIds = Array.from(new Set(items.map(comment => comment.itemId).filter(Boolean)));
+    let itemMap = new Map<number, Item>();
+    if (itemIds.length > 0) {
+      const linkedItems = await this.itemRepository.find({ where: { id: In(itemIds) } });
+      itemMap = new Map(linkedItems.map(item => [item.id, item]));
+    }
+
+    items.forEach(comment => {
+      comment.item = itemMap.get(comment.itemId) || null;
+    });
+
     return { items, total };
   }
 
@@ -43,15 +57,13 @@ export class UsersService {
       isAdmin: user.role === '管理员',
       avatar: user.avatar,
       createdAt: new Date(),
-      items: [],
-      purchasedItems: [],
     }
     return this.usersRepository.save(account);
   }
 
   async findOne(username: string, includeRelations: boolean = false): Promise<User | undefined> {
     if (includeRelations) {
-      return this.usersRepository.findOne({ where: { username }, relations: ['items', 'purchasedItems'] });
+      return this.usersRepository.findOne({ where: { username } });
     }
     return this.usersRepository.findOne({ where: { username } });
   }

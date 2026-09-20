@@ -7,3 +7,4 @@ uploads
 config.json
 release
 **/cache/*
+wju.js
