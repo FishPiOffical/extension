@@ -958,9 +958,9 @@ export class ItemsService {
         await this.usersService.updatePoints(user.username, -project.price, `购买${typeLabel} ${project.name}`);
         const author = await this.usersService.findById(project.authorId);
         if (author?.username) {
-          await this.usersService.updatePoints(author.username, project.price * 0.7, `出售${typeLabel} ${project.name}`);
+          await this.usersService.updatePoints(author.username, parseInt((project.price * 0.7).toString()), `出售${typeLabel} ${project.name}`);
         }
-        await this.usersService.updatePoints('admin', project.price * 0.3, `买卖${typeLabel} ${project.name} 手续费`);
+        await this.usersService.updatePoints('admin', parseInt((project.price * 0.3).toString()), `买卖${typeLabel} ${project.name} 手续费`);
       }
 
       await this.ensureProjectPurchase(project.id, userId);
