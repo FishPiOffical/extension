@@ -352,7 +352,7 @@ export class ItemsController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async findOne(@Param('id', ParseIntPipe) id: number, @Request() req) {
-    return this.itemsService.findOne(id, req.user.userId);
+    return this.itemsService.findOne(id, req.user.userId, req.user.isAdmin);
   }
 
   @Get(':id/versions')

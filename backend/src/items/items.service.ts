@@ -746,10 +746,10 @@ export class ItemsService {
     return { ...view, isEnabled, isAutoUpdate, isPurchased, purchaseCount };
   }
 
-  async findOne(id: number, userId?: string): Promise<any> {
+  async findOne(id: number, userId?: string, isAdmin = false): Promise<any> {
     const { code, project } = await this.resolveCodeByAnyId(id, ItemStatus.APPROVED);
 
-    if (code.status !== ItemStatus.APPROVED && project.authorId !== userId) {
+    if (code.status !== ItemStatus.APPROVED && project.authorId !== userId && !isAdmin) {
       throw new ForbiddenException('Item not approved');
     }
 
