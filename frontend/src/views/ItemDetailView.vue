@@ -124,7 +124,21 @@ watch(() => [route.params.id, route.params.identifier, route.params.version], ()
 
 const highlightCode = () => {
   document.querySelectorAll('pre code').forEach((block) => {
-    hljs.highlightElement(block as HTMLElement)
+    const el = block as HTMLElement
+    // try to extract language from class like 'language-javascript'
+    const m = (el.className || '').match(/language-([a-zA-Z0-9_+-]+)/)
+    const lang = m && m[1] ? String(m[1]).toLowerCase() : ''
+    if (lang && hljs.getLanguage && hljs.getLanguage(lang)) {
+      try {
+        hljs.highlightElement(el)
+        return
+      } catch (e) {
+        // fallthrough to auto highlight
+        console.warn('hljs.highlightElement failed, falling back to highlightAuto', e)
+      }
+    }
+    const auto = hljs.highlightAuto(el.textContent || '')
+    el.innerHTML = auto.value
   })
 }
 
@@ -482,7 +496,7 @@ onMounted(() => {
              </button>
           </div>
           <pre class="p-6 overflow-x-auto text-sm leading-relaxed">
-            <code :class="`language-${item.language}`">{{ item.code }}</code>
+            <code :class="item.language ? `language-${item.language}` : ''">{{ item.code }}</code>
           </pre>
         </div>
       </div>

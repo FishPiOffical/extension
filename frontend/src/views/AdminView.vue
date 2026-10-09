@@ -58,10 +58,24 @@ const openReviewModal = async (item: any) => {
     selectedItem.value = detailRes.data
     reviewComment.value = ''
     viewMode.value = selectedItem.value.upgradeFrom ? 'diff' : 'code'
+
+    // ensure language is either a non-empty string or left undefined
+    if (selectedItem.value && typeof selectedItem.value.language === 'string') {
+      selectedItem.value.language = selectedItem.value.language.trim()
+      if (selectedItem.value.language === '') selectedItem.value.language = undefined
+    }
+
     await nextTick()
     const block = document.querySelector('.modal pre code')
     if (block) {
-      hljs.highlightElement(block as HTMLElement)
+      const el = block as HTMLElement
+      const lang = (selectedItem.value?.language || '').toLowerCase()
+      if (lang && hljs.getLanguage && hljs.getLanguage(lang)) {
+        hljs.highlightElement(el)
+      } else {
+        const auto = hljs.highlightAuto(el.textContent || '')
+        el.innerHTML = auto.value
+      }
     }
   } catch (error) {
     console.error('Failed to load item detail for review:', error)
@@ -298,7 +312,7 @@ onMounted(() => {
                   </div>
                   <div class="rounded-b-2xl overflow-hidden">
                     <pre v-if="viewMode === 'code'" class="m-0 p-8 overflow-auto max-h-[70vh] text-xs font-mono leading-relaxed bg-[#0d1117]">
-                      <code :class="'language-' + selectedItem.language">{{ selectedItem.code }}</code>
+                      <code :class="selectedItem.language ? 'language-' + selectedItem.language : ''">{{ selectedItem.code }}</code>
                     </pre>
                     <div v-else class="max-h-[70vh] overflow-auto bg-[#0d1117] pl-4">
                       <CodeDiff
