@@ -31,6 +31,10 @@ const modules = ConfigService.isConfigured()
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
       exclude: ['/api/'], // 排除 API 路径
+      serveStaticOptions: {
+        maxAge: '7d',
+        etag: true,
+      },
     }),
   ],
 })

@@ -19,6 +19,7 @@ import { ItemsService } from './items.service';
 import { UsersService } from '../users/users.service';
 import { ItemStatus, ItemType } from './item.entity';
 import { defaultAllowGlobals, loaderCode } from '../utils/injection';
+import { createHash } from 'crypto';
 
 @Controller('items')
 export class ItemsController {
@@ -156,14 +157,29 @@ export class ItemsController {
 
   @Get(':id/loader.js')
   async getLoader(@Param('id') id: string, @Res() res, @Request() req) {
-    const user = await this.usersService.findById(id);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    const origin = req.query.origin || '';
+    const cacheKey = `${id}:${origin}`;
+
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'no-cache');
+
+    const ifNoneMatch = req.headers['if-none-match'];
+
+    const cached = this.itemsService.getUserLoaderCache(cacheKey);
+    if (cached) {
+      res.setHeader('ETag', cached.etag);
+      if (ifNoneMatch && ifNoneMatch === cached.etag) {
+        res.status(304).end();
+        return;
+      }
+      res.send(cached.content);
+      return;
+    }
+
+    const user = await this.usersService.findById(id);
     if (!user) {
       res.send(`
         const scriptSrc = new URL(import.meta.url);
@@ -171,8 +187,6 @@ export class ItemsController {
       `);
       return;
     }
-
-    const origin = req.query.origin;
 
     const items = await this.itemsService.getUserPurchases(user.id);
     const extensionIds = items.filter(p => p.type === 'extension' && p.isEnabled).map(i => i.id);
@@ -187,12 +201,23 @@ export class ItemsController {
         dependencies: i.dependencies?.map(d => d.id) || []
       }));
 
-    res.send(loaderCode()
+    const content = loaderCode()
       .replace(/`{{#Ids}}`/, extensionIds.join(', '))
       .replace(/`{{#Themes}}`/, themeIds.join(', '))
       .replace(/['"`]{{#UserId}}['"`]/, `'${user.id}'`)
-      .replace(/\[`{{#ExtensionData}}`\]/, JSON.stringify(extensionData))
-    );
+      .replace(/\[`{{#ExtensionData}}`\]/, JSON.stringify(extensionData));
+
+    const etag = `W/"${createHash('md5').update(content).digest('hex')}"`;
+    res.setHeader('ETag', etag);
+
+    this.itemsService.setUserLoaderCache(cacheKey, content, etag, 60000);
+
+    if (ifNoneMatch && ifNoneMatch === etag) {
+      res.status(304).end();
+      return;
+    }
+
+    res.send(content);
   }
 
   @Get(':id/app-extension')

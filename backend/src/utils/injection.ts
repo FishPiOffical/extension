@@ -1,7 +1,27 @@
 import { readFileSync } from "fs"
 import { join } from "path";
 
-export const loaderCode = () => readFileSync(join(__dirname, '../../loader.min.js'), 'utf-8');
+let cachedLoaderCode: string | null = null;
+
+export const loaderCode = () => {
+  if (cachedLoaderCode === null) {
+    try {
+      cachedLoaderCode = readFileSync(join(__dirname, '../../loader.min.js'), 'utf-8');
+    } catch {
+      try {
+        cachedLoaderCode = readFileSync(join(process.cwd(), 'loader.min.js'), 'utf-8');
+      } catch (e) {
+        console.error('Failed to read loader.min.js:', e);
+        return '';
+      }
+    }
+  }
+  return cachedLoaderCode;
+};
+
+export const clearLoaderTemplateCache = () => {
+  cachedLoaderCode = null;
+};
 
 export const defaultAllowGlobals = [
   'crypto',

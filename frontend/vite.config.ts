@@ -34,5 +34,6 @@ export default defineConfig({
   },
   build: {
     outDir: '../release/public',
+    emptyOutDir: true,
   }
 })

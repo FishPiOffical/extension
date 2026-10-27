@@ -59,6 +59,55 @@ export class ItemsService {
   private readonly gzipAsync = promisify(gzip);
   private readonly gunzipAsync = promisify(gunzip);
 
+  private readonly userLoaderCache = new Map<string, { content: string; etag: string; expiresAt: number }>();
+
+  public static readonly ITEM_CODE_METADATA_COLUMNS: (keyof ItemCode)[] = [
+    'id',
+    'itemId',
+    'version',
+    'language',
+    'status',
+    'matchUrls',
+    'upgradeFromCodeId',
+    'reviewComment',
+    'createdAt',
+    'updatedAt',
+  ];
+
+  public getUserLoaderCache(key: string): { content: string; etag: string; expiresAt: number } | undefined {
+    const entry = this.userLoaderCache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.userLoaderCache.delete(key);
+      return undefined;
+    }
+    return entry;
+  }
+
+  public setUserLoaderCache(key: string, content: string, etag: string, ttlMs: number = 60000): void {
+    if (this.userLoaderCache.size > 2000) {
+      const firstKey = this.userLoaderCache.keys().next().value;
+      if (firstKey) this.userLoaderCache.delete(firstKey);
+    }
+    this.userLoaderCache.set(key, {
+      content,
+      etag,
+      expiresAt: Date.now() + ttlMs,
+    });
+  }
+
+  public clearUserLoaderCache(userId?: string): void {
+    if (!userId) {
+      this.userLoaderCache.clear();
+      return;
+    }
+    for (const key of this.userLoaderCache.keys()) {
+      if (key.startsWith(userId)) {
+        this.userLoaderCache.delete(key);
+      }
+    }
+  }
+
   private uniqueNumberIds(ids: number[]): number[] {
     return Array.from(new Set(ids.filter((id) => Number.isInteger(id) && id > 0)));
   }
@@ -77,20 +126,30 @@ export class ItemsService {
     }
   }
 
-  private async getLatestCodeForProject(itemId: number, status?: ItemStatus): Promise<ItemCode | null> {
+  private async getLatestCodeForProject(
+    itemId: number,
+    status?: ItemStatus,
+    includeCode: boolean = false,
+  ): Promise<ItemCode | null> {
     const where: any = { itemId };
     if (status) {
       where.status = status;
     }
+    const select = includeCode ? undefined : (ItemsService.ITEM_CODE_METADATA_COLUMNS as any);
     const rows = await this.itemCodeRepository.find({
       where,
+      select,
       order: { version: 'DESC', createdAt: 'DESC' },
       take: 1,
     });
     return rows[0] || null;
   }
 
-  private async getLatestCodeMapByProjectIds(itemIds: number[], status?: ItemStatus): Promise<Map<number, ItemCode>> {
+  private async getLatestCodeMapByProjectIds(
+    itemIds: number[],
+    status?: ItemStatus,
+    includeCode: boolean = false,
+  ): Promise<Map<number, ItemCode>> {
     const projectIds = this.uniqueNumberIds(itemIds);
     const out = new Map<number, ItemCode>();
     if (projectIds.length === 0) {
@@ -102,6 +161,21 @@ export class ItemsService {
       .orderBy('code.itemId', 'ASC')
       .addOrderBy('code.version', 'DESC')
       .addOrderBy('code.createdAt', 'DESC');
+
+    if (!includeCode) {
+      qb.select([
+        'code.id',
+        'code.itemId',
+        'code.version',
+        'code.language',
+        'code.status',
+        'code.matchUrls',
+        'code.upgradeFromCodeId',
+        'code.reviewComment',
+        'code.createdAt',
+        'code.updatedAt',
+      ]);
+    }
 
     if (status) {
       qb.andWhere('code.status = :status', { status });
@@ -234,7 +308,7 @@ export class ItemsService {
     if (includeDependencies) {
       const links = await this.itemDependencyRepository.find({ where: { itemId: In(projectIds) } });
       const depProjectIds = this.uniqueNumberIds(links.map((link) => link.dependencyItemId));
-      const depCodeMap = await this.getLatestCodeMapByProjectIds(depProjectIds, ItemStatus.APPROVED);
+      const depCodeMap = await this.getLatestCodeMapByProjectIds(depProjectIds, ItemStatus.APPROVED, false);
       const depCodes = Array.from(depCodeMap.values());
       const depViews = await this.buildItemViewsFromCodes(depCodes, {
         includeCode: false,
@@ -262,7 +336,10 @@ export class ItemsService {
     if (includeUpgradeFrom) {
       const parentCodeIds = this.uniqueNumberIds(codes.map((code) => code.upgradeFromCodeId).filter(Boolean));
       if (parentCodeIds.length > 0) {
-        const parentCodes = await this.itemCodeRepository.find({ where: { id: In(parentCodeIds) } });
+        const parentCodes = await this.itemCodeRepository.find({
+          where: { id: In(parentCodeIds) },
+          select: includeCode ? undefined : (ItemsService.ITEM_CODE_METADATA_COLUMNS as any),
+        });
         const parentViews = await this.buildItemViewsFromCodes(parentCodes, {
           includeCode,
           includeDependencies: false,
@@ -529,9 +606,9 @@ export class ItemsService {
 
     let codeMap: Map<number, ItemCode>;
     if (status) {
-      codeMap = await this.getLatestCodeMapByProjectIds(projectIds, status);
+      codeMap = await this.getLatestCodeMapByProjectIds(projectIds, status, false);
     } else {
-      codeMap = await this.getLatestCodeMapByProjectIds(projectIds);
+      codeMap = await this.getLatestCodeMapByProjectIds(projectIds, undefined, false);
     }
 
     let codes = Array.from(codeMap.values());
@@ -562,6 +639,7 @@ export class ItemsService {
     const codeMap = await this.getLatestCodeMapByProjectIds(
       projects.map((project) => project.id),
       ItemStatus.APPROVED,
+      false,
     );
     const codes = Array.from(codeMap.values()).sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -811,7 +889,7 @@ export class ItemsService {
       return [];
     }
 
-    const codeMap = await this.getLatestCodeMapByProjectIds(Array.from(visited), ItemStatus.APPROVED);
+    const codeMap = await this.getLatestCodeMapByProjectIds(Array.from(visited), ItemStatus.APPROVED, false);
     const codes = Array.from(codeMap.values());
     return this.buildItemViewsFromCodes(codes, {
       includeCode: false,
@@ -829,6 +907,7 @@ export class ItemsService {
 
     const codes = await this.itemCodeRepository.find({
       where,
+      select: ItemsService.ITEM_CODE_METADATA_COLUMNS as any,
       order: { version: 'DESC', createdAt: 'DESC' },
     });
 
@@ -859,7 +938,8 @@ export class ItemsService {
         await this.itemStateRepository.save(state);
       }
 
-      this.approvedItemsCache.set(savedCode.id, null);
+      this.approvedItemsCache.delete(savedCode.id);
+      this.clearUserLoaderCache();
       await fsp.unlink(path.join(this.CACHE_DIR, `${savedCode.id}.json.gz`)).catch(() => undefined);
     }
 
@@ -928,6 +1008,7 @@ export class ItemsService {
       }
     }
 
+    this.clearUserLoaderCache(userId);
     return view;
   }
 
@@ -1001,6 +1082,7 @@ export class ItemsService {
       }
     }
 
+    this.clearUserLoaderCache(userId);
     return view;
   }
 
@@ -1008,6 +1090,7 @@ export class ItemsService {
     const project = await this.resolveProjectByAnyId(itemId);
     await this.itemPurchaseRepository.delete({ itemId: project.id, userId });
     await this.itemStateRepository.delete({ userId, itemId: project.id });
+    this.clearUserLoaderCache(userId);
   }
 
   async getUserPurchases(userId: string, type?: ItemType): Promise<any[]> {
@@ -1032,36 +1115,67 @@ export class ItemsService {
       : [];
 
     const stateMap = new Map(states.map((row) => [row.itemId, row]));
+    const filteredProjects = type ? projects.filter((p) => p.type === type) : projects;
+    if (filteredProjects.length === 0) {
+      return [];
+    }
+
+    // 1. 批量收集用户指定了 selectedCodeId 的版本
+    const stateCodeIds: number[] = [];
+    for (const project of filteredProjects) {
+      const state = stateMap.get(project.id);
+      if (state?.selectedCodeId) {
+        stateCodeIds.push(state.selectedCodeId);
+      }
+    }
+
+    let stateCodes: ItemCode[] = [];
+    if (stateCodeIds.length > 0) {
+      stateCodes = await this.itemCodeRepository.find({
+        where: { id: In(stateCodeIds) },
+        select: ItemsService.ITEM_CODE_METADATA_COLUMNS as any,
+      });
+    }
+    const stateCodeByItem = new Map<number, ItemCode>();
+    for (const code of stateCodes) {
+      stateCodeByItem.set(code.itemId, code);
+    }
+
+    // 2. 批量拉取没有自定义版本或自定义版本不存在的已审核版本
+    const needLatestApprovedProjectIds = filteredProjects
+      .filter((p) => !stateCodeByItem.has(p.id))
+      .map((p) => p.id);
+
+    const approvedMap = await this.getLatestCodeMapByProjectIds(
+      needLatestApprovedProjectIds,
+      ItemStatus.APPROVED,
+      false,
+    );
+
+    // 3. 作者自身项目兜底：若尚未通过审核且有状态，拉取任意最新版本
+    const stillMissingAuthorProjectIds = filteredProjects
+      .filter((p) => authoredProjectIds.has(p.id) && !!stateMap.get(p.id))
+      .filter((p) => !stateCodeByItem.has(p.id) && !approvedMap.has(p.id))
+      .map((p) => p.id);
+
+    const fallbackAuthorCodeMap = stillMissingAuthorProjectIds.length > 0
+      ? await this.getLatestCodeMapByProjectIds(stillMissingAuthorProjectIds, undefined, false)
+      : new Map<number, ItemCode>();
 
     const selectedCodes: ItemCode[] = [];
-    for (const project of projects) {
-      if (type && project.type !== type) {
-        continue;
-      }
-
-      const state = stateMap.get(project.id);
-      let selected: ItemCode = null;
-
-      if (state?.selectedCodeId) {
-        const byState = await this.itemCodeRepository.findOne({ where: { id: state.selectedCodeId, itemId: project.id } });
-        if (byState) {
-          selected = byState;
-        }
-      }
-
+    for (const project of filteredProjects) {
+      let selected = stateCodeByItem.get(project.id);
       if (!selected) {
-        selected = await this.getLatestCodeForProject(project.id, ItemStatus.APPROVED);
+        selected = approvedMap.get(project.id);
       }
-
-      if (!selected && authoredProjectIds.has(project.id) && state) {
-        selected = await this.getLatestCodeForProject(project.id);
+      if (!selected && authoredProjectIds.has(project.id) && stateMap.has(project.id)) {
+        selected = fallbackAuthorCodeMap.get(project.id);
       }
-
       if (!selected) {
         continue;
       }
 
-      const visible = purchasedProjectIds.has(project.id) || (authoredProjectIds.has(project.id) && !!state);
+      const visible = purchasedProjectIds.has(project.id) || (authoredProjectIds.has(project.id) && !!stateMap.get(project.id));
       if (visible) {
         selectedCodes.push(selected);
       }
@@ -1070,7 +1184,7 @@ export class ItemsService {
     const views = await this.buildItemViewsFromCodes(selectedCodes, {
       includeCode: false,
       includeDependencies: true,
-      includeUpgradeFrom: true,
+      includeUpgradeFrom: false,
     });
 
     return views.map((view) => {
@@ -1115,6 +1229,7 @@ export class ItemsService {
     }
 
     await this.itemStateRepository.save(state);
+    this.clearUserLoaderCache(userId);
     return { isEnabled: state.isEnabled, isAutoUpdate: state.isAutoUpdate };
   }
 
@@ -1145,6 +1260,7 @@ export class ItemsService {
     }
 
     await this.itemStateRepository.save(state);
+    this.clearUserLoaderCache(userId);
     return { isAutoUpdate: state.isAutoUpdate };
   }
 
@@ -1161,6 +1277,7 @@ export class ItemsService {
       includeDependencies: true,
       includeUpgradeFrom: true,
     });
+    this.clearUserLoaderCache(userId);
     return view;
   }
 
@@ -1183,6 +1300,7 @@ export class ItemsService {
     }
 
     this.approvedItemsCache.delete(code.id);
+    this.clearUserLoaderCache(userId);
     await fsp.unlink(path.join(this.CACHE_DIR, `${code.id}.json.gz`)).catch(() => undefined);
   }
 
